@@ -95,7 +95,7 @@
 -   **URL:** `http://<host>:8000/api/chat`
 -   **Method:** `POST`
 -   **Headers:** `Content-Type: application/json`
--   **Input Body (JSON):
+-   **Input Body (JSON):**
     ```json
     {
       "question": "질문 내용",
