@@ -102,7 +102,7 @@
       "session_id": "고유한 세션 ID"
     }
     ```
--   **예시 (cURL):
+-   **예시 (cURL):**
     ```bash
     curl -X POST "http://localhost:8000/api/chat" \
     -H "Content-Type: application/json" \
@@ -111,7 +111,7 @@
       "session_id": "user123_session_abc"
     }'
     ```
--   **Return 값 예시 (JSON):
+-   **Return 값 예시 (JSON):**
     ```json
     {
       "return_answer": "지진 발생 시에는 먼저 머리를 보호하고 튼튼한 책상이나 테이블 밑으로 들어가 몸을 피해야 합니다. 건물이 흔들리는 동안에는 이동하지 않는 것이 안전하며, 흔들림이 멈추면 전기와 가스를 차단하고 신속하게 건물 밖으로 대피해야 합니다...",
@@ -149,13 +149,13 @@
 -   **URL:** `http://<host>:8000/api/generate_form`
 -   **Method:** `POST`
 -   **Headers:** `Content-Type: application/json`
--   **Input Body (JSON):
+-   **Input Body (JSON):**
     ```json
     {
       "question": "질문 내용"
     }
     ```
--   **예시 (cURL):
+-   **예시 (cURL):**
     ```bash
     curl -X POST "http://localhost:8000/api/generate_form" \
     -H "Content-Type: application/json" \
