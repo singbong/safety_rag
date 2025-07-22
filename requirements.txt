@@ -1,0 +1,49 @@
+fastapi==0.111.0
+uvicorn==0.29.0
+
+
+google-genai
+google-cloud-aiplatform
+
+# LangChain & friends – recent split packages
+langchain==0.3.26
+langchain-openai==0.3.24
+langchain-google-community
+langchain-google-community[vertexaisearch]
+langchain-community==0.3.26
+langchain-core==0.3.66
+langchain-experimental
+langchain-text-splitters
+langchain_neo4j
+langchain-google-vertexai
+langgraph
+
+
+# Data & viz helpers
+pandas==2.3.0
+matplotlib==3.8.4
+seaborn==0.13.2
+openpyxl==3.1.5
+
+# FastAPI helpers
+python-multipart==0.0.9
+requests==2.32.3
+aiofiles==24.1.0
+httpx==0.28.1
+websockets>=13.0,<15.0
+
+# Templating
+jinja2==3.1.2
+
+# OpenAI SDK (버전 업데이트)
+openai>=1.86.0,<2.0.0
+langchain-teddynote==0.3.44
+
+pdfplumber
+transformers>=4.36.2,<4.41.0
+numpy==1.26.4
+google-cloud-aiplatform
+python-dotenv
+faiss-cpu
+langchain-google-vertexai
+ipykernel

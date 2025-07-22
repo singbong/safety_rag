@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  fire-app:
+    build: .
+    container_name: fire-app-container
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./vector:/app/vector
+      - ./fire_app.py:/app/fire_app.py
+    env_file:
+      - ./.env
+    environment:
+      - TZ=Asia/Seoul
+      - LANGSMITH_TRACING=true
+      - LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
+      - LANGSMITH_PROJECT="fire_rag"
+    restart: always

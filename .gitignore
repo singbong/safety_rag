@@ -1,0 +1,19 @@
+# Environments
+.env
+.env.*
+!/.env.example
+
+# Data
+/vector/data/
+/vector/definition/arcane-footing-464017-v9-a73a60318d02.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.ipynb_checkpoints
+/test.ipynb
