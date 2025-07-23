@@ -1,4 +1,4 @@
-# Fire RAG (소방 재난 정보 RAG)
+# Safety RAG (소방 재난 정보 RAG)
 
 소방 및 재난 안전 관련 문서에 대한 질문에 답변하는 RAG(Retrieval-Augmented Generation) 시스템입니다. LangGraph와 Google Gemini 모델을 기반으로 구축되었습니다.
 
@@ -95,7 +95,7 @@
 -   **URL:** `http://<host>:8000/api/chat`
 -   **Method:** `POST`
 -   **Headers:** `Content-Type: application/json`
--   **Input Body (JSON):
+-   **Input Body (JSON):**
     ```json
     {
       "question": "질문 내용",
@@ -164,7 +164,6 @@
     }'
     ```
 -   **Return 은 /api/chat과 동일합니다.**
-    ```
 
 ## 3. 기술 상세 설명
 
