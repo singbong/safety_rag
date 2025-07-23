@@ -96,7 +96,6 @@ class GraphState(TypedDict):
     document: Annotated[List[str], "Combined documents"]
     generation: Annotated[str, "LLM generated answer"]
     hallu_check: Annotated[dict, "Hallucination check result"]
-    session_id: Annotated[Optional[str], "Session ID for memory management"]
 
 class chat_chain():
     def __init__(self):
@@ -110,7 +109,7 @@ class chat_chain():
         # 답변 생성 및 Grounding 확인용 LLM
         self.generate_llm = ChatVertexAI(
             model_name="gemini-2.5-flash", # Grounding을 지원하는 최신 모델 사용 권장
-            temperature=0.1,
+            temperature=0.4,
             verbose=True,
         )
         self.graph = StateGraph(GraphState)
@@ -168,14 +167,14 @@ class chat_chain():
         for decomposed_question in state["decomposed_question"]:
             searched_documents.extend(vector_store.search(decomposed_question, k=50))
         
-        # # 중복 문서 제거
-        # unique_documents = []
-        # seen_contents = set()
-        # for doc in searched_documents:
-        #     if doc['document'] not in seen_contents:
-        #         unique_documents.append(doc)
-        #         seen_contents.add(doc['document'])
-        # searched_documents = unique_documents
+        # 중복 문서 제거
+        unique_documents = []
+        seen_contents = set()
+        for doc in searched_documents:
+            if doc['document'] not in seen_contents:
+                unique_documents.append(doc)
+                seen_contents.add(doc['document'])
+        searched_documents = unique_documents
         
         searched_documents = vector_store.document_rerank(state["question"], searched_documents, k=25)
         return {**state, "document": searched_documents}

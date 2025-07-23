@@ -14,7 +14,7 @@ import warnings
 warnings.filterwarnings("ignore")
 from dotenv import load_dotenv
 from vector.definition.chain_for_chat import chat_chain
-from vector.definition.chain_for_form import form_chain
+# from vector.definition.chain_for_form import form_chain
 from typing import Optional
 from pydantic import BaseModel
 from langchain.memory import ConversationSummaryMemory
@@ -47,7 +47,8 @@ def get_session_memory(session_id: str) -> ConversationSummaryMemory:
     return lc_memories[session_id]
 
 chat_flow = chat_chain().link_nodes()
-make_form_flow = form_chain().link_nodes()
+
+# make_form_flow = form_chain().link_nodes()
 
 
 def chat_rag(question: str, session_id: str) -> str:
@@ -55,28 +56,28 @@ def chat_rag(question: str, session_id: str) -> str:
                 recursion_limit=12,
                 configurable={"thread_id": session_id},
                 timeout=120,  # 2분 타임아웃
-                max_retries=3  # 최대 3회 재시도
+                max_retries=2  # 최대 2회 재시도
             )
     # 세션에 맞는 메모리 가져오기
     memory = get_session_memory(session_id)
     chat_history = memory.load_memory_variables({"query": ""}).get("chat_history", "")
-    inputs = {"question": question, "chat_history": chat_history, "session_id": session_id}
+    inputs = {"question": question, "chat_history": chat_history}
     final_state = chat_flow.invoke(inputs, config)
     memory.save_context({"query": final_state["question"]}, {"answer": final_state.get("generation", "에러: 답변을 생성할 수 없습니다!")})
     return final_state.get("generation", "에러: 답변을 생성할 수 없습니다!") ,final_state.get("hallu_check", "에러 발생!")
 
 
-def make_form_rag(question: str) -> str:
-    config = RunnableConfig(
-                recursion_limit=12,
-                configurable={"thread_id": random_uuid()},
-                timeout=120,  # 2분 타임아웃
-                max_retries=3  # 최대 3회 재시도
-            )
-    inputs = {"question": question}
-    final_state = make_form_flow.invoke(inputs, config)
-    # form chain은 hallu_check를 반환하지 않으므로, 답변만 반환
-    return final_state.get("generation", "에러: 답변을 생성할 수 없습니다.")
+# def make_form_rag(question: str) -> str:
+#     config = RunnableConfig(
+#                 recursion_limit=12,
+#                 configurable={"thread_id": random_uuid()},
+#                 timeout=120,  # 2분 타임아웃
+#                 max_retries=3  # 최대 3회 재시도
+#             )
+#     inputs = {"question": question}
+#     final_state = make_form_flow.invoke(inputs, config)
+#     # form chain은 hallu_check를 반환하지 않으므로, 답변만 반환
+#     return final_state.get("generation", "에러: 답변을 생성할 수 없습니다.")
 
 
 # FastAPI 애플리케이션 설정
@@ -96,21 +97,21 @@ class ApiRequest(BaseModel):
     question: str
     session_id: Optional[str] = None
 
-# API 엔드포인트 생성
-@app.post("/api/generate_form")
-async def generate_form_endpoint(request: ApiRequest):
-    """
-    질문을 받아 form 형식의 답변을 생성하는 API 엔드포인트입니다.
-    이 엔드포인트는 상태를 유지하지 않는 make_form_rag 함수를 사용합니다.
-    """
-    try:
-        answer = make_form_rag(request.question)
-        # README와 응답 형식을 맞추기 위해 hallu_check는 기본값을 넣어 반환
-        return {"return_answer": answer, "hallu_check": "Form generation does not include hallucination check."}
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+# # API 엔드포인트 생성
+# @app.post("/api/generate_form")
+# async def generate_form_endpoint(request: ApiRequest):
+#     """
+#     질문을 받아 form 형식의 답변을 생성하는 API 엔드포인트입니다.
+#     이 엔드포인트는 상태를 유지하지 않는 make_form_rag 함수를 사용합니다.
+#     """
+#     try:
+#         answer = make_form_rag(request.question)
+#         # README와 응답 형식을 맞추기 위해 hallu_check는 기본값을 넣어 반환
+#         return {"return_answer": answer, "hallu_check": "Form generation does not include hallucination check."}
+#     except Exception as e:
+#         import traceback
+#         print(traceback.format_exc())
+#         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ApiRequest):
