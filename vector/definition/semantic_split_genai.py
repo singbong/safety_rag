@@ -48,7 +48,11 @@ from dotenv import load_dotenv
 import vertexai
 from vertexai.language_models import TextEmbeddingModel
 
-
+os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
+os.environ["PROJECT_ID"] = os.getenv("PROJECT_ID")
+os.environ["GOOGLE_CLOUD_LOCATION"] = "asia-northeast1"
 
 class GeminiEmbeddings(Embeddings):
     """

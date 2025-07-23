@@ -14,17 +14,11 @@ from langchain_community.vectorstores import FAISS
 from langchain_core.documents import Document
 from langchain_google_community import VertexAIRank
 from langchain_community.docstore.in_memory import InMemoryDocstore
-from google.oauth2 import service_account
-
 
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
-project_id = os.getenv("PROJECT_ID")
-google_api_key = os.getenv("GOOGLE_API_KEY")
-credential_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
-credentials = service_account.Credentials.from_service_account_file(credential_path)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credential_path
-os.environ["GOOGLE_API_KEY"] = google_api_key
-os.environ["PROJECT_ID"] = project_id
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
+os.environ["PROJECT_ID"] = os.getenv("PROJECT_ID")
 os.environ["GOOGLE_CLOUD_LOCATION"] = "asia-northeast1"
 
 class VertexEmbeddings:
@@ -45,7 +39,7 @@ class VertexEmbeddings:
 
         # Vertex AI 초기화
         try:
-            vertexai.init(project=self.project_id, location=self.region, credentials=credentials)
+            vertexai.init(location=self.region)
             self.embedding_model = TextEmbeddingModel.from_pretrained(model)
             print("Vertex AI 초기화 성공")
         except Exception as e:
