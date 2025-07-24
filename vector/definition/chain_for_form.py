@@ -20,7 +20,8 @@ os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CRE
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 os.environ["PROJECT_ID"] = os.getenv("PROJECT_ID")
 os.environ["GOOGLE_CLOUD_LOCATION"] = "asia-northeast1"
-credential = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+credential_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+credentials = service_account.Credentials.from_service_account_file(credential_path)
 warnings.filterwarnings("ignore")
 
 # Vertex AI 초기화
@@ -104,7 +105,7 @@ generate_prompt_system = """
 * 선별된 핵심 정보들을 [안내 방식]에 지정된 형식에 맞춰 재구성하고 초안을 작성해.
 * '상세 안내문'일 경우: 제목, 개요, 본문(소제목과 글머리 기호 사용), 당부 말씀 등 격식 있고 체계적인 구조로 작성.
 * '방송'일 경우: 시민들이 쉽게 이해할 수 있도록 명확하고 간결한 문장으로, 주의사항과 행동 요령을 중심으로 방송문을 작성해. (예: "지금은 폭염특보가 발효 중입니다. 야외활동을 자제하고, 충분한 수분을 섭취하세요.")
-* '공지판'일 경우: 한눈에 들어오는 제목, 핵심 요점(글머리표 사용), 주의사항 등으로 구성된 공지문 형태로 작성해. (예: "폭염 시 행동 요령 - 1. 외출 자제 2. 물 자주 마시기 3. 노약자 각별히 주의")
+* '공지판' or 'None' 일 경우: 한눈에 들어오는 제목, 핵심 요점(글머리표 사용), 주의사항 등으로 구성된 공지문 형태로 작성해. (예: "폭염 시 행동 요령 - 1. 외출 자제 2. 물 자주 마시기 3. 노약자 각별히 주의")
 * '문자 메시지'일 경우: 글자 수 제한을 고려하여 가장 중요한 내용만을 짧고 명확하게 요약해서 작성해. (예: "폭염주의! 외출 자제, 물 자주 마시세요.")
 
 4. 최종 생성 및 검토:
@@ -123,11 +124,11 @@ class GraphState(TypedDict):
     generation: Annotated[str, "LLM generated answer"]
     hallu_check: Annotated[dict, "Hallucination check result"]
     query_list: Annotated[List[str], "Query list"]
-    
-    instruction_type: Annotated[str, "Instruction type"]
-    user_additional_request: Annotated[str, "User additional request"]
+
     operation_period: Annotated[str, "Operation period"]
     operation_time: Annotated[str, "Operation time"]
+    instruction_type: Annotated[str, "Instruction type"]
+    user_additional_request: Annotated[str, "User additional request"]
     searched_documents: Annotated[List[str], "Documents"]
 
 class form_chain():
@@ -141,7 +142,7 @@ class form_chain():
         )
         # 답변 생성 및 Grounding 확인용 LLM
         self.generate_llm = ChatVertexAI(
-            model_name="gemini-2.5-flash", # Grounding을 지원하는 최신 모델 사용 권장
+            model_name="gemini-1.5-flash", # Grounding을 지원하는 최신 모델 사용 권장
             temperature=0.4,
             verbose=True,
         )
@@ -152,10 +153,10 @@ class form_chain():
             location_id = "asia-northeast1",
             grounding_config="default_grounding_config",   # 기본값
             citation_threshold=0.5,
-            credentials=credential,
+            credentials=credentials,
         )
 
-    def query_generate(self, operation_period: str, operation_time: str, user_additional_request: Optional[str] = None) -> str:
+    def query_generate(self, operation_period: str, operation_time: str, user_additional_request: Optional[str] = None, instruction_type: Optional[str] = None) -> str:
         generate_prompt = ChatPromptTemplate.from_messages([
             ("system", query_generator_system),
             ("user",   "chat operation_period: {operation_period} \n operation_time: {operation_time} \n user_additional_request: {user_additional_request}")
@@ -188,9 +189,9 @@ class form_chain():
         unique_documents = []
         seen_contents = set()
         for doc in documents:
-            if doc['document'] not in seen_contents:
+            if doc.page_content not in seen_contents:
                 unique_documents.append(doc)
-                seen_contents.add(doc['document'])
+                seen_contents.add(doc.page_content)
         return {**state, "searched_documents": unique_documents}
 
     def generator(self, state: GraphState) -> GraphState:
@@ -200,11 +201,11 @@ class form_chain():
     def hallu_checker(self, state: GraphState) -> GraphState:
         hallu_check = self.checker.invoke(
             state["generation"],
-            config = {"configurable": {"documents": state["documents"]}}
+            config = {"configurable": {"documents": state["searched_documents"]}}
         )
         return {**state, "hallu_check": hallu_check}
 
-    def check_hallu_complete_chat(self, state: GraphState) -> str:
+    def check_hallu_complete_form(self, state: GraphState) -> str:
         """
         Grounding 확인 결과를 바탕으로 다음 단계를 결정합니다.
         """
@@ -214,30 +215,27 @@ class form_chain():
         if score >= 0.5:
             return END
         else:
-            return "re_writer"
+            return "query_generator"
 
     def link_nodes(self):
         """
         LangGraph의 노드들을 연결하여 그래프를 구성합니다.
         """
-        self.graph.add_node("re_writer", self.re_writer)
-        self.graph.add_node("question_decomposer", self.question_decomposer)
+        self.graph.add_node("query_generator", self.query_generator)
         self.graph.add_node("search_document", self.search_document)
         self.graph.add_node("generator", self.generator)
         self.graph.add_node("hallu_checker", self.hallu_checker)
 
-        self.graph.add_edge(START, "re_writer")
-        self.graph.add_edge("re_writer", "question_decomposer")
-        self.graph.add_edge("question_decomposer", "search_document")
+        self.graph.add_edge(START, "query_generator")
+        self.graph.add_edge("query_generator", "search_document")
         self.graph.add_edge("search_document", "generator")
         self.graph.add_edge("generator", "hallu_checker")
-
         self.graph.add_conditional_edges(
             "hallu_checker",
-            self.check_hallu_complete_chat, # 함수 객체 자체를 전달
+            self.check_hallu_complete_form,
             {
                 END: END,
-                "re_writer": "re_writer"
+                "query_generator": "query_generator"
             }
         )
         # 컴파일된 그래프 반환

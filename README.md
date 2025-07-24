@@ -191,7 +191,7 @@
 2.  **재순위 (Reranking):**
     -   초기 검색된 150개의 문서를 `VertexAIRank` 모델을 사용하여 질문과의 관련성이 높은 순으로 재정렬합니다.
         -   `VertexAIRank`는 Google Cloud Vertex AI에서 제공하는 의미 기반 랭킹(semantic reranking) 서비스로, 쿼리(질문)와 각 문서(청크) 간의 의미적 유사도를 정밀하게 평가하여 점수를 부여합니다.
-        -   VertexAIRank에서 사용하는 임베딩 및 랭킹 모델은 `semantic-ranker-default-004`입니다. 이 모델은 쿼리와 문서 모두에 대해 1024토큰까지 임베딩을 생성하고, 최신 LLM 기반의 의미적 비교를 통해 쿼리-문서 쌍의 관련성을 평가합니다. (공식 문서 및 Vertex AI 콘솔 기준)
+        -   VertexAIRank에서 사용하는 임베딩 및 랭킹 모델은 `semantic-ranker-default-004`입니다. 이 모델은 쿼리(query)와 문서(document) 모두에 대해 1024토큰까지 임베딩을 생성하고, 최신 LLM 기반의 의미적 비교를 통해 쿼리-문서 쌍의 관련성을 평가합니다. (공식 문서 및 Vertex AI 콘솔 기준)
         -   단순 키워드 일치가 아니라, 쿼리와 문서의 의미적 맥락을 반영하여 랭킹을 수행하므로, BM25나 TF-IDF 등 전통적 방식보다 훨씬 더 정밀한 의미 기반 랭킹이 가능합니다.
         -   VertexAIRank는 Vertex AI 플랫폼에서 제공하는 관리형 서비스로, 대규모 데이터셋과 다양한 도메인에 대해 높은 성능과 확장성을 보장합니다.
     -   최종적으로 가장 관련성이 높은 상위 20개의 문서를 답변 생성에 사용합니다.
@@ -208,3 +208,53 @@
     -   생성된 답변이 근거 문서에 기반했는지 확인하기 위해 `VertexAICheckGroundingWrapper`를 사용합니다.
     -   답변의 각 문장이 근거 문서에 의해 얼마나 뒷받침되는지를 나타내는 `support_score`를 계산합니다.
     -   이 점수가 0.5 미만일 경우, 답변의 신뢰도가 낮다고 판단하여 그래프는 다시 **질문 재작성** 단계로 돌아가 더 나은 답변을 생성하려고 시도합니다. 이 과정을 통해 답변의 정확성과 신뢰도를 높입니다.
+## API 사용 예제 (Python)
+
+아래는 Python의 `requests` 라이브러리를 사용하여 API를 호출하는 예제입니다.
+
+### Chat API 호출
+
+```python
+import requests
+
+chat_url = "http://localhost:8000/api/chat"
+chat_payload = {
+    "question": "지진 발생 시 행동 요령 알려줘",
+    "session_id": "user123_session_abc"
+}
+
+try:
+    chat_response = requests.post(chat_url, json=chat_payload)
+    chat_response.raise_for_status()  # 응답 코드가 200번대가 아니면 에러 발생
+    chat_result = chat_response.json()
+    print("Chat API 응답:")
+    print(chat_result)
+except requests.exceptions.RequestException as e:
+    print(f"Chat API 호출 오류: {e}")
+
+```
+
+### Generate Form API 호출
+
+```python
+import requests
+
+form_url = "http://localhost:8000/api/generate_form"
+form_payload = {
+    "operation_period": "3월 13일 ~ 5월 16일",
+    "operation_time": "오전 10시 ~ 오후 6시",
+    "instruction_type" : "상세 안내문",
+    "user_additional_request" : "벚꽃 축제를 열거야"
+}
+
+try:
+    form_response = requests.post(form_url, json=form_payload)
+    form_response.raise_for_status()
+    form_result = form_response.json()
+    print("\nGenerate Form API 응답:")
+    print(form_result)
+except requests.exceptions.RequestException as e:
+    print(f"\nGenerate Form API 호출 오류: {e}")
+```
+
+```
