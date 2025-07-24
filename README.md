@@ -84,90 +84,9 @@
   uvicorn fire_app:app --host 0.0.0.0 --port 8000
   ```
 
-## 2. API 사용 방법
+## 2. 기술 상세 설명
 
-애플리케이션이 실행되면 local host의 8000번 포트에서 두 개의 API 엔드포인트를 사용할 수 있습니다.
-
-### 2.1. `/api/chat` (채팅 API)
-
-대화의 맥락을 기억하는 채팅 형식의 답변을 생성합니다. 세션 유지를 위해 `session_id`가 필수입니다.
-
--   **URL:** `http://<host>:8000/api/chat`
--   **Method:** `POST`
--   **Headers:** `Content-Type: application/json`
--   **Input Body (JSON):**
-    ```json
-    {
-      "question": "질문 내용",
-      "session_id": "고유한 세션 ID"
-    }
-    ```
--   **예시 (cURL):**
-    ```bash
-    curl -X POST "http://localhost:8000/api/chat" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "question": "지진 발생 시 행동 요령 알려줘",
-      "session_id": "user123_session_abc"
-    }'
-    ```
--   **Return 값 예시 (JSON):**
-    ```json
-    {
-      "return_answer": "지진 발생 시에는 먼저 머리를 보호하고 튼튼한 책상이나 테이블 밑으로 들어가 몸을 피해야 합니다. 건물이 흔들리는 동안에는 이동하지 않는 것이 안전하며, 흔들림이 멈추면 전기와 가스를 차단하고 신속하게 건물 밖으로 대피해야 합니다...",
-      "hallu_check": {
-        "support_score": 0.95,
-        "answer_with_citation": "지진 발생 시에는 먼저 머리를 보호하고 튼튼한 책상이나 테이블 밑으로 들어가 몸을 피해야 합니다.[0]",
-        "cited_chunks": [
-          {
-            "chunk_text": "지진 발생 시 대피 요령...",
-            "source": {
-              "page_content": "...",
-              "metadata": {
-                "pdf_filename": "2-2(분책) 1장 지진.pdf",
-                "page_numbers": [3]
-              }
-            }
-          }
-        ],
-        "claims": [
-          {
-            "claim_text": "지진 발생 시에는 먼저 머리를 보호하고...",
-            "citation_indices": [0]
-          }
-        ]
-      }
-    }
-    ```
-    - `return_answer`: 최종 생성된 답변 텍스트입니다.
-    - `hallu_check`: 답변의 신뢰도를 검증한 결과입니다. `support_score`가 1에 가까울수록 참조한 문서 내용에 기반한 답변임을 의미합니다. `answer_with_citation`은 생성된 답변에서 각 문장을 뒷받침하는 document들을 citation을 추가한 답변입니다.
-
-### 2.2. `/api/generate_form` (양식 생성 API)
-
-대화 맥락 없이, 단일 질문에 대해 양식(form) 형태의 답변을 생성하는 데 사용됩니다. `session_id`가 필요 없습니다.
-
--   **URL:** `http://<host>:8000/api/generate_form`
--   **Method:** `POST`
--   **Headers:** `Content-Type: application/json`
--   **Input Body (JSON):**
-    ```json
-    {
-      "question": "질문 내용"
-    }
-    ```
--   **예시 (cURL):**
-    ```bash
-    curl -X POST "http://localhost:8000/api/generate_form" \
-    -H "Content-Type: application/json" \
-    -d '{
-      "question": "화재 발생 시 초기 진화 방법"
-    }'
-    ```
--   **Return 은 /api/chat과 동일합니다.**
-
-## 3. 기술 상세 설명
-
-### 3.1. 문서 처리 및 벡터화
+### 2.1. 문서 처리 및 벡터화
 
 1.  **텍스트 추출:** `pdfplumber`를 사용하여 원본 PDF에서 텍스트와 페이지 번호 등 메타데이터를 추출합니다.
 2.  **의미 기반 분할 (Semantic Chunking):**
@@ -180,7 +99,7 @@
     -   컨텍스트가 보강된 텍스트(`"컨텍스트 요약 : 원본 청크 내용"`)를 `gemini-embedding-001` 모델을 통해 임베딩 벡터로 변환합니다.
     -   생성된 벡터는 `FAISS` (IndexFlatL2)를 사용하여 벡터 데이터베이스에 저장됩니다.
 
-### 3.2. 검색 및 재순위 (Retrieval & Reranking)
+### 2.2. 검색 및 재순위 (Retrieval & Reranking)
 
 1.  **하이브리드 검색 (Hybrid Search):**
     -   `Langchain`의 `EnsembleRetriever`를 사용하여 두 가지 검색 방식을 결합합니다.
@@ -196,7 +115,7 @@
         -   VertexAIRank는 Vertex AI 플랫폼에서 제공하는 관리형 서비스로, 대규모 데이터셋과 다양한 도메인에 대해 높은 성능과 확장성을 보장합니다.
     -   최종적으로 가장 관련성이 높은 상위 20개의 문서를 답변 생성에 사용합니다.
 
-### 3.3. 답변 생성 및 검증 (Generation & Verification)
+### 2.3. 답변 생성 및 검증 (Generation & Verification)
 
 이 시스템은 `LangGraph`를 사용하여 다음과 같은 단계적 체인(Chain)을 구성합니다.
 
@@ -208,6 +127,7 @@
     -   생성된 답변이 근거 문서에 기반했는지 확인하기 위해 `VertexAICheckGroundingWrapper`를 사용합니다.
     -   답변의 각 문장이 근거 문서에 의해 얼마나 뒷받침되는지를 나타내는 `support_score`를 계산합니다.
     -   이 점수가 0.5 미만일 경우, 답변의 신뢰도가 낮다고 판단하여 그래프는 다시 **질문 재작성** 단계로 돌아가 더 나은 답변을 생성하려고 시도합니다. 이 과정을 통해 답변의 정확성과 신뢰도를 높입니다.
+
 ## API 사용 예제 (Python)
 
 아래는 Python의 `requests` 라이브러리를 사용하여 API를 호출하는 예제입니다.
@@ -223,15 +143,10 @@ chat_payload = {
     "session_id": "user123_session_abc"
 }
 
-try:
-    chat_response = requests.post(chat_url, json=chat_payload)
-    chat_response.raise_for_status()  # 응답 코드가 200번대가 아니면 에러 발생
-    chat_result = chat_response.json()
-    print("Chat API 응답:")
-    print(chat_result)
-except requests.exceptions.RequestException as e:
-    print(f"Chat API 호출 오류: {e}")
-
+chat_response = requests.post(chat_url, json=chat_payload)
+chat_response.raise_for_status()  # 응답 코드가 200번대가 아니면 에러 발생
+chat_result = chat_response.json()
+print(chat_result)
 ```
 
 ### Generate Form API 호출
@@ -247,14 +162,9 @@ form_payload = {
     "user_additional_request" : "벚꽃 축제를 열거야"
 }
 
-try:
-    form_response = requests.post(form_url, json=form_payload)
-    form_response.raise_for_status()
-    form_result = form_response.json()
-    print("\nGenerate Form API 응답:")
-    print(form_result)
-except requests.exceptions.RequestException as e:
-    print(f"\nGenerate Form API 호출 오류: {e}")
-```
 
+form_response = requests.post(form_url, json=form_payload)
+form_response.raise_for_status()
+form_result = form_response.json()
+print(form_result)
 ```
