@@ -65,7 +65,12 @@
 
 ## 설치 및 실행 방법
 
-### 1. 로컬 환경 설정
+### 사전 준비 사항
+
+- [Docker](https://www.docker.com/get-started)와 [Docker Compose](https://docs.docker.com/compose/install/)가 설치되어 있어야 합니다.
+- Google Cloud API 키 및 서비스 계정 인증 정보가 필요합니다.
+
+### 실행 절차
 
 1.  **프로젝트 복제**
     ```bash
@@ -73,56 +78,40 @@
     cd safety_rag
     ```
 
-2.  **가상환경 생성 및 활성화**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate  # Windows의 경우 `venv\Scripts\activate`
-    ```
+2.  **환경 변수 설정**
+    프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 다음과 같이 Google 관련 정보를 추가합니다. `docker-compose.yml` 파일에서 이 `.env` 파일을 참조하여 컨테이너 내에 환경 변수를 설정합니다.
 
-3.  **의존성 패키지 설치**
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **환경 변수 설정**
-    프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 아래 내용을 채웁니다.
     ```env
     GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"
     PROJECT_ID="YOUR_PROJECT_ID"
     GOOGLE_APPLICATION_CREDENTIALS="PATH/TO/YOUR/CREDENTIALS.json"
     ```
+    *`GOOGLE_APPLICATION_CREDENTIALS`에 지정된 `.json` 인증 키 파일은 프로젝트 내부에 위치해야 합니다. (예: `vector/definition/your-credentials.json`)*
 
-### 2. 데이터 준비 및 벡터화 (로컬 실행)
-
-1.  **데이터 준비**
+3.  **데이터 준비**
     `vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
 
-2.  **문서 처리 및 벡터 DB 생성**
-    아래 명령어를 순서대로 실행하여 PDF 텍스트 추출, 문서 분할, 컨텍스트 생성, 벡터화를 진행합니다.
+4.  **문서 처리 및 벡터 DB 생성**
+    다음 명령어를 실행하여 PDF 문서를 처리하고 벡터 스토어를 생성합니다. 이 과정은 `make_docs` 파이프라인을 통해 진행됩니다. `--rm` 옵션은 명령어 실행 후 컨테이너를 자동으로 삭제합니다.
+
     ```bash
-    python vector/definition/make_full_text.py
-    python vector/definition/make_docs.py
-    python vector/definition/make_contextual_content_with_caching.py
-    python vector/definition/vector_store.py
+    docker-compose run --rm app python fire_app.py make_docs
     ```
 
-### 3. 애플리케이션 실행
+5.  **애플리케이션 실행**
 
--   **API 서버 실행**:
-    ```bash
-    uvicorn fire_app:app --host 0.0.0.0 --port 8000
-    ```
+    -   **API 서버 실행**:
+        아래 명령어로 API 서버를 백그라운드에서 실행합니다.
+        ```bash
+        docker-compose up --build -d
+        ```
+        API는 `http://127.0.0.1:8000`에서 접근할 수 있습니다.
 
-### (대안) Docker를 이용한 실행
-
-Docker와 Docker Compose가 설치된 환경에서는 아래 명령어로 모든 과정을 더 간편하게 실행할 수 있습니다.
-
-1.  **환경 변수 설정**: 위의 `1. 로컬 환경 설정`의 4번 단계를 참고하여 `.env` 파일을 생성합니다.
-2.  **데이터 준비**: `vector/data/original_pdf/`에 PDF 파일을 추가합니다.
-3.  **빌드 및 실행**:
-    ```bash
-    docker-compose up --build -d
-    ```
+    -   **CLI 채팅 실행**:
+        문서 처리가 완료되면 다음 명령어를 통해 대화형 질의응답을 시작할 수 있습니다.
+        ```bash
+        docker-compose run --rm app python fire_app.py chat
+        ```
 
 ## 기술 상세 설명
 
