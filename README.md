@@ -36,6 +36,7 @@
 ├── .env                    # API 키, 프로젝트 ID 등 환경 변수 설정 파일
 ├── .git/                   # Git 버전 관리 시스템 디렉토리
 ├── .gitignore              # Git 추적 제외 목록 파일
+├── api_example.ipynb       # API 사용법 예시를 담은 Jupyter Notebook
 ├── docker-compose.yml      # Docker 다중 컨테이너 실행을 위한 설정 파일
 ├── Dockerfile              # 애플리케이션 Docker 이미지 빌드 설정 파일
 ├── fire_app.py             # FastAPI 서버 실행 및 CLI 명령어 처리를 위한 메인 스크립트
@@ -49,6 +50,8 @@
     │   ├── original_pdf/          # 분석할 원본 PDF 문서 저장 위치
     │   └── vector_store/          # 생성된 FAISS 벡터 DB(.index, .pkl) 저장 위치
     └── definition/         # RAG 파이프라인의 핵심 로직 정의 디렉토리
+        ├── __pycache__/           # Python 컴파일 캐시 파일 디렉토리
+        ├── arcane-footing-464017-v9-a73a60318d02.json # Google Cloud 서비스 계정 인증 키
         ├── chain_for_chat.py      # 일반 채팅 RAG 체인 정의
         ├── chain_for_form.py      # 양식(Form) 기반 안전 안내문 생성 체인 정의
         ├── chain_for_form_chat.py # 생성된 안내문에 대한 후속 질문 처리 체인 정의
@@ -63,59 +66,68 @@
 
 ## 설치 및 실행 방법
 
-### 사전 준비 사항
-
-- [Docker](https://www.docker.com/get-started)와 [Docker Compose](https://docs.docker.com/compose/install/)가 설치되어 있어야 합니다.
-- Google Cloud API 키가 필요합니다.
-
-### 실행 절차
+### 1. 로컬 환경 설정
 
 1.  **프로젝트 복제**
-
     ```bash
     git clone https://github.com/singbong/safety_rag.git
     cd safety_rag
     ```
 
-2.  **환경 변수 설정**
+2.  **가상환경 생성 및 활성화**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # Windows의 경우 `venv\Scripts\activate`
+    ```
 
-    프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 다음과 같이 Google API 키를 추가합니다.
+3.  **의존성 패키지 설치**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
+4.  **환경 변수 설정**
+    프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 아래 내용을 채웁니다.
     ```env
     GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"
     PROJECT_ID="YOUR_PROJECT_ID"
     GOOGLE_APPLICATION_CREDENTIALS="PATH/TO/YOUR/CREDENTIALS.json"
     ```
-    *`docker-compose.yml` 파일에서 이 `.env` 파일을 참조하여 컨테이너 내에 환경 변수를 설정합니다.*
 
-3.  **Docker 컨테이너 빌드 및 실행**
+### 2. 데이터 준비 및 벡터화 (로컬 실행)
 
+1.  **데이터 준비**
+    `vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
+
+2.  **문서 처리 및 벡터 DB 생성**
+    아래 명령어를 순서대로 실행하여 PDF 텍스트 추출, 문서 분할, 컨텍스트 생성, 벡터화를 진행합니다.
+    ```bash
+    python vector/definition/make_full_text.py
+    python vector/definition/make_docs.py
+    python vector/definition/make_contextual_content_with_caching.py
+    python vector/definition/vector_store.py
+    ```
+
+### 3. 애플리케이션 실행
+
+-   **API 서버 실행**:
+    ```bash
+    uvicorn fire_app:app --host 0.0.0.0 --port 8000
+    ```
+-   **CLI 채팅 실행**:
+    ```bash
+    python fire_app.py chat
+    ```
+
+### (대안) Docker를 이용한 실행
+
+Docker와 Docker Compose가 설치된 환경에서는 아래 명령어로 모든 과정을 더 간편하게 실행할 수 있습니다.
+
+1.  **환경 변수 설정**: 위의 `1. 로컬 환경 설정`의 4번 단계를 참고하여 `.env` 파일을 생성합니다.
+2.  **데이터 준비**: `vector/data/original_pdf/`에 PDF 파일을 추가합니다.
+3.  **빌드 및 실행**:
     ```bash
     docker-compose up --build -d
     ```
-
-## 사용 방법
-
-### 1. 데이터 준비
-
-`vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
-
-### 2. 문서 처리 및 벡터화
-
-다음 명령어를 실행하여 PDF 문서를 처리하고 벡터 스토어를 생성합니다. 이 과정은 `make_docs` 파이프라인을 통해 진행됩니다.
-
-```bash
-docker-compose run --rm app python fire_app.py make_docs
-```
-*`--rm` 옵션은 명령어 실행 후 컨테이너를 자동으로 삭제합니다.*
-
-### 3. 채팅 시작
-
-문서 처리가 완료되면 다음 명령어를 통해 대화형 질의응답을 시작할 수 있습니다.
-
-```bash
-docker-compose run --rm app python fire_app.py chat
-```
 
 ## 기술 상세 설명
 
@@ -126,7 +138,7 @@ docker-compose run --rm app python fire_app.py chat
     -   `Langchain`의 `SemanticChunker`와 Google의 `gemini-embedding-001` 모델을 사용하여 문서를 의미적 경계에 따라 1차적으로 분할합니다.
     -   분할된 청크가 Gemini 모델의 토큰 제한(2048 토큰)을 초과할 경우, `RecursiveCharacterTextSplitter`와 유사한 방식으로 추가 분할하여 모든 청크가 토큰 제한을 준수하도록 합니다.
 -   **컨텍스트 보강 (Contextual Enrichment)**:
-    -   각 청크의 검색 정확도를 높이기 위해, `gemini-1.5-flash` 모델을 사용하여 전체 문서의 내용을 참조하여 각 청크에 대한 한 문장 요약 컨텍스트를 생성합니다.
+    -   각 청크의 검색 정확도를 높이기 위해, `gemini-2.5-flash-lite` 모델을 사용하여 전체 문서의 내용을 참조하여 각 청크에 대한 한 문장 요약 컨텍스트를 생성합니다.
     -   이 과정에서 Google GenAI의 Caching API를 활용하여 전체 문서 텍스트를 캐시에 저장함으로써, 반복적인 API 호출 비용과 시간을 절약합니다.
 -   **벡터화**:
     -   컨텍스트가 보강된 텍스트(`"컨텍스트 요약 : 원본 청크 내용"`)를 `gemini-embedding-001` 모델을 통해 임베딩 벡터로 변환합니다.
