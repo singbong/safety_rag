@@ -16,7 +16,7 @@
 -   **핵심 프레임워크**:
     -   `LangChain` & `LangGraph`: RAG 파이프라인 및 복잡한 Agent 로직 구성
     -   `FastAPI`: API 서버 구축
--   **AI & 머신러닝**:
+-   **AI**:
     -   `google-generativeai` & `google-cloud-aiplatform`: Google Gemini 모델 API 활용
     -   `langchain-google-vertexai`: LangChain과 Vertex AI 통합
     -   `FAISS`: 벡터 데이터베이스 (유사도 검색)
@@ -24,8 +24,7 @@
 -   **데이터 처리**:
     -   `pdfplumber`: PDF 텍스트 추출
     -   `pandas`, `numpy`: 데이터 조작 및 분석
--   **CLI & 배포**:
-    -   `google-fire`: 커맨드 라인 인터페이스 구축
+-   **배포**:
     -   `Docker` & `docker-compose`: 컨테이너 기반 배포 및 실행 환경
     -   `uvicorn`: ASGI 서버
 
@@ -112,10 +111,6 @@
 -   **API 서버 실행**:
     ```bash
     uvicorn fire_app:app --host 0.0.0.0 --port 8000
-    ```
--   **CLI 채팅 실행**:
-    ```bash
-    python fire_app.py chat
     ```
 
 ### (대안) Docker를 이용한 실행
