@@ -19,13 +19,13 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 os.environ["PROJECT_ID"] = os.getenv("PROJECT_ID")
-os.environ["GOOGLE_CLOUD_LOCATION"] = "asia-northeast1"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
 class VertexEmbeddings:
     """
     Google Vertex AI를 이용한 LangChain Embeddings 래퍼 클래스
     """
-    def __init__(self, project_id: Optional[str] = None, region: str = "asia-northeast1", model: str = "gemini-embedding-001"):
+    def __init__(self, project_id: Optional[str] = None, region: str = "us-central1", model: str = "gemini-embedding-001"):
         if project_id is None:
             project_id = os.getenv("PROJECT_ID")
         if not project_id:
@@ -191,7 +191,7 @@ class store_vector_db:
                 project_id=self.embedding_model.project_id,
                 location_id="global",
                 ranking_config="default_ranking_config",
-                top_n=10,
+                top_n=20,
                 model="semantic-ranker-default-004",
             )
             print("✅ 검색기 및 리랭커 초기화 완료")
@@ -231,11 +231,18 @@ class store_vector_db:
             Document(page_content=doc_result["document"], metadata=doc_result["metadata"])
             for doc_result in documents
         ]
-        
+        reranker = VertexAIRank(
+                project_id=self.embedding_model.project_id,
+                location_id="us-central1",
+                ranking_config="default_ranking_config",
+                top_n= k,
+                model="semantic-ranker-default-004",
+            )
         try:
             # Vertex AI Rank로 리랭킹 (올바른 매개변수 순서: documents, query)
             reranked_docs = self.reranker.compress_documents(docs_for_rerank, query)
             result = []
+
             for doc in reranked_docs[:k]:
                 result.append(docs_for_rerank[int(doc.metadata['id'])])
 

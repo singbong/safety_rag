@@ -14,7 +14,8 @@ import warnings
 warnings.filterwarnings("ignore")
 from dotenv import load_dotenv
 from vector.definition.chain_for_chat import chat_chain
-# from vector.definition.chain_for_form import form_chain
+from vector.definition.chain_for_form_chat import form_chat_chain
+from vector.definition.chain_for_form import form_chain
 from typing import Optional
 from pydantic import BaseModel
 from langchain.memory import ConversationSummaryMemory
@@ -31,7 +32,7 @@ def get_session_memory(session_id: str) -> ConversationSummaryMemory:
         # 새 세션을 위한 메모리 객체 생성
         lc_memories[session_id] = ConversationSummaryMemory(
             llm=ChatVertexAI(
-                model_name="gemini-1.5-flash",
+                model_name="gemini-2.5-flash-lite",
                 api_transport="rest",
                 temperature=0
             ),
@@ -47,8 +48,8 @@ def get_session_memory(session_id: str) -> ConversationSummaryMemory:
     return lc_memories[session_id]
 
 chat_flow = chat_chain().link_nodes()
-
-# make_form_flow = form_chain().link_nodes()
+form_chat_flow = form_chat_chain().link_nodes()
+make_form_flow = form_chain().link_nodes()
 
 
 def chat_rag(question: str, session_id: str) -> str:
@@ -64,20 +65,44 @@ def chat_rag(question: str, session_id: str) -> str:
     inputs = {"question": question, "chat_history": chat_history}
     final_state = chat_flow.invoke(inputs, config)
     memory.save_context({"query": final_state["question"]}, {"answer": final_state.get("generation", "에러: 답변을 생성할 수 없습니다!")})
-    return final_state.get("generation", "에러: 답변을 생성할 수 없습니다!") ,final_state.get("hallu_check", "에러 발생!")
+    return final_state
 
 
-# def make_form_rag(question: str) -> str:
-#     config = RunnableConfig(
-#                 recursion_limit=12,
-#                 configurable={"thread_id": random_uuid()},
-#                 timeout=120,  # 2분 타임아웃
-#                 max_retries=3  # 최대 3회 재시도
-#             )
-#     inputs = {"question": question}
-#     final_state = make_form_flow.invoke(inputs, config)
-#     # form chain은 hallu_check를 반환하지 않으므로, 답변만 반환
-#     return final_state.get("generation", "에러: 답변을 생성할 수 없습니다.")
+def make_form(place_name: str, type: str, region: str, period: str, description: Optional[str] = None, category: Optional[str] = None, related_documents: Optional[str] = None, emergency_contact_name: Optional[str] = None, emergency_contact_phone: Optional[str] = None) -> str:
+    config = RunnableConfig(
+                recursion_limit=12,
+                timeout=120,  # 2분 타임아웃
+                max_retries=2,  # 최대 2회 재시도
+                configurable={"thread_id": random_uuid()}
+            )
+    inputs = {
+        "place_name": place_name,
+        "type": type,
+        "region": region,
+        "period": period,
+        "description": description,
+        "category": category,
+        "related_documents": related_documents,
+        "emergency_contact_name": emergency_contact_name,
+        "emergency_contact_phone": emergency_contact_phone
+    }
+    final_state = make_form_flow.invoke(inputs, config)
+    return final_state
+
+def make_form_chat(generated_form: Optional[str] = None, query: str = None, session_id: str = None) -> str:
+    config = RunnableConfig(
+                recursion_limit=12,
+                configurable={"thread_id": session_id},
+                timeout=120,  # 2분 타임아웃
+                max_retries=2  # 최대 2회 재시도
+            )
+    memory = get_session_memory(session_id)
+    chat_history = memory.load_memory_variables({"query": ""}).get("chat_history", "")
+    inputs = {"generated_form": generated_form, "query": query, "chat_history": chat_history}
+    final_state = form_chat_flow.invoke(inputs, config)
+    memory.save_context({"query": final_state["query"]}, {"answer": final_state.get("generation", "에러: 답변을 생성할 수 없습니다!")})
+    return final_state
+
 
 
 # FastAPI 애플리케이션 설정
@@ -97,21 +122,24 @@ class ApiRequest(BaseModel):
     question: str
     session_id: Optional[str] = None
 
-# # API 엔드포인트 생성
-# @app.post("/api/generate_form")
-# async def generate_form_endpoint(request: ApiRequest):
-#     """
-#     질문을 받아 form 형식의 답변을 생성하는 API 엔드포인트입니다.
-#     이 엔드포인트는 상태를 유지하지 않는 make_form_rag 함수를 사용합니다.
-#     """
-#     try:
-#         answer = make_form_rag(request.question)
-#         # README와 응답 형식을 맞추기 위해 hallu_check는 기본값을 넣어 반환
-#         return {"return_answer": answer, "hallu_check": "Form generation does not include hallucination check."}
-#     except Exception as e:
-#         import traceback
-#         print(traceback.format_exc())
-#         raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+class FormChatRequest(BaseModel):
+    generated_form: Optional[str] = None
+    query: str
+    session_id: Optional[str] = None
+
+
+class FormRequest(BaseModel):
+    place_name: str
+    type: str
+    region: str
+    period: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    related_documents: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+
+
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ApiRequest):
@@ -123,8 +151,46 @@ async def chat_endpoint(request: ApiRequest):
         if not request.session_id:
             # 채팅은 세션 ID가 필수입니다.
             raise HTTPException(status_code=400, detail="session_id is required for chat.")
-        answer, hallu_check = chat_rag(request.question, request.session_id)
-        return {"return_answer": answer, "hallu_check": hallu_check}
+        final_state = chat_rag(request.question, request.session_id)
+        return final_state
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+
+
+
+#API 엔드포인트 생성
+@app.post("/api/generate_form")
+async def generate_form_endpoint(request: FormRequest):
+
+    try:
+        final_state = make_form(
+            place_name=request.place_name,
+            type=request.type,
+            region=request.region,
+            period=request.period,
+            description=request.description,
+            category=request.category,
+            related_documents=request.related_documents,
+            emergency_contact_name=request.emergency_contact_name,
+            emergency_contact_phone=request.emergency_contact_phone
+        )
+        return final_state
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+
+
+
+@app.post("/api/form_chat")
+async def form_chat_endpoint(request: FormChatRequest):
+    try:
+        if not request.session_id:
+            raise HTTPException(status_code=400, detail="session_id is required for form chat.")
+        final_state = make_form_chat(request.generated_form, request.query, request.session_id)
+        return final_state
     except Exception as e:
         import traceback
         print(traceback.format_exc())

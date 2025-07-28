@@ -7,7 +7,7 @@ from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_google_community.vertex_check_grounding import VertexAICheckGroundingWrapper
 from langgraph.graph import END, StateGraph, START
 from google.oauth2 import service_account
-from typing import List, Optional
+from typing import List
 from dotenv import load_dotenv
 from langgraph.checkpoint.memory import MemorySaver
 from .vector_store import store_vector_db
@@ -19,104 +19,142 @@ os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 os.environ["PROJECT_ID"] = os.getenv("PROJECT_ID")
-os.environ["GOOGLE_CLOUD_LOCATION"] = "asia-northeast1"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 credential_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 credentials = service_account.Credentials.from_service_account_file(credential_path)
 warnings.filterwarnings("ignore")
 
 # Vertex AI 초기화
-
-vertexai.init(project=os.getenv("PROJECT_ID"), location="asia-northeast1")
+vertexai.init(project=os.getenv("PROJECT_ID"), location="us-central1")
 
 # Vector Store 로드
 vector_store = store_vector_db()
 vector_store.load_vector_store("./vector/data/vector_store/")
 
-
-
 query_generator_system = """
-    [역할 및 목표 정의]
-    너는 사용자의 입력을 분석하여 벡터 저장소(Vector Store)에서 가장 정확한 안전 정보를 검색하기 위한 '검색어 생성 전문 AI'다.
-    너의 임무는 아래 **[사용자 입력 정보]**를 다각적으로 분석하고 추론하여, 관련 문서를 효과적으로 찾아낼 수 있는 여러 개의 구체적인 검색어(질문 형태)들을 생성하는 것이다.
+[역할 및 목표]
+너는 사용자의 행사 등록 정보를 분석하여, 발생 가능한 모든 안전 위협을 예측하고 관련 정보를 검색하기 위한 '다각적 검색어 생성 AI'다.
+너의 임무는 아래 **[사용자 등록 정보]**를 바탕으로, Vector Store에서 가장 정확하고 유용한 안전 문서를 찾아낼 수 있는 구체적이고 다양한 검색어(질문 형태)들을 생성하는 것이다.
 
-    [사용자 입력 정보]
-        - 운영 기간: [operation_period]
-        - 운영 시간: [operation_time]
-        - 사용자 추가 요청: [user_additional_request]
+[사용자 등록 정보]
+- 행사명: {place_name}
+- 행사 유형: {type}
+- 개최 지역: {region}
+- 행사 기간: {period}
+- 행사 설명: {description}
+- 카테고리: {category}
+- 주최측 제공 자료: {related_documents}
 
-    [작업 수행 지침]
-    1. 입력 정보 분석 및 컨텍스트 추론:
-        - 운영기간을 보고 계절(여름, 겨울 등), 시기적 특성(장마철, 휴가철, 명절 등)을 추론한다.
-        - 운영시간을 보고 시간대(주간, 야간, 새벽)에 따른 환경적 특성을 추론한다.
-        - 사용자 추가 요청을 보고 핵심 키워드와 사용자가 가장 중요하게 생각하는 안전 이슈를 정확히 파악한다. (예: 야외 행사, 물놀이, 화재 예방 등)
+[작업 수행 지침]
+1. **정보 분석 및 위험 요소 추론:**
+    - **행사 정보:** '{place_name}'({type}, {category})의 특성과 '{description}'에 명시된 주요 활동을 분석하여 잠재적 위험 요소를 예측한다.
+    - **개최 지역:** '{region}'의 지리적, 환경적 특성을 고려하여 발생 가능한 안전사고 유형을 추론한다.
+    - **행사 기간:** '{period}'를 분석하여 계절적(예: 폭염, 한파, 장마) 또는 시기적(예: 휴가철, 명절) 위험 요소를 예측한다.
+    - **주최측 자료:** '{related_documents}'의 내용을 분석하여 핵심 안전 키워드를 추출하고, 검색어에 반영한다.
 
-    2. 다각적 검색어 생성:
-        - 위 분석 내용을 바탕으로, 아래 세 가지 유형의 검색어를 각각 생성한다. 각 검색어는 단일 키워드가 아닌, 자연스러운 질문 또는 구체적인 서술 형태여야 한다.
+2. **다각적 검색어 생성:**
+    - 위 분석 내용을 종합하여, 아래 4가지 관점의 검색어를 **최소 5개 이상** 생성한다. 각 검색어는 독립적으로 검색 가능한 완전한 질문 형태여야 한다.
 
-        A. 시기적/환경적 검색어 (1~3개):
-        - 추론된 계절, 날씨, 시간대와 관련된 포괄적인 안전 수칙을 묻는 질문을 생성한다.
-        - (예시) "여름철(7월, 8월)에 주로 발생하는 안전사고 종류와 예방 수칙은 무엇인가?"
-        - (예시) "야간 시간대 야외 활동 시 주의해야 할 안전 문제는?"
+    A. **[행사 유형 + 카테고리] 기반 검색어 (1~2개):**
+        - (예시) "콘서트(음악) 행사 안전 관리 수칙"
+        - (예시) "스포츠 경기장 방문객 안전 가이드라인"
+        - (예시) "지역 축제(문화/예술) 안전사고 예방 대책"
 
-        B. 상황/유형별 검색어 (1~2개):
-        - [user_additional_request]에 언급된 상황(예: '야외 행사', '건설 현장')과 관련된 일반적인 안전 매뉴얼이나 가이드를 찾는 질문을 생성한다.
-        - (예시) "대규모 야외 행사를 진행할 때 반드시 점검해야 할 안전 관리 항목은?"
-        - (예시) "건축 공사장 폭염 대비 근로자 안전 가이드라인은?"
+    B. **[주요 활동 + 잠재위험] 기반 검색어 (2~3개):**
+        - (예시) "행사장 내 체험 부스 시설물 안전 점검 항목"
+        - (예시) "불꽃놀이 행사 시 화재 및 화상 예방 수칙"
+        - (예시) "여름철 야외 행사 식중독 예방 방법"
 
-        C. 사용자 요청 기반 검색어 (1~3개):
-        - [user_additional_request]에서 사용자가 직접 '강조'해달라고 요청한 핵심 내용에 대해 가장 구체적이고 직접적인 질문을 생성한다. 이 유형의 검색어가 가장 중요하다.
-        - (예시) "폭염 발생 시 온열질환 예방 및 응급처치 방법은?"
-        - (예시) "여름철 식중독 예방을 위한 식품 보관 및 조리 수칙은?"
-        - (예시) "물놀이 시 발생할 수 있는 익사 사고 예방 수칙은 무엇인가?"
+    C. **[응급상황] 기반 검색어 (1~2개):**
+        - (예시) "행사장에서 응급 환자 발생 시 대처 요령"
+        - (예시) "다중 밀집 행사에서 압사 사고 예방 수칙"
+        - (예시) "재난 상황 발생 시 행사 참여자 대피 안내 방법"
 
-    3. 최종 출력 형식 준수:
+    D. **[지역 + 기간] 기반 검색어 (1개 이상):**
+        - (예시) "해안가 지역 여름철 행사 진행 시 기상 악화 대처법"
+        - (예시) "겨울철 야외 축제 방문객 한랭질환 예방 안내"
 
-    **아래와 같이 JSON 형태로 출력하라. 반드시 JsonOutputParser()로 파싱 가능한 형태여야 한다.**
-
+3. **최종 출력 형식 준수:**
+    - 아래와 같이 JSON 형태로 출력하라. 반드시 `JsonOutputParser()`로 파싱 가능한 형태여야 한다.
+    ```json
     {{
-        "query": ["생성된 검색어 1", "생성된 검색어 2", "생성된 검색어 3",..., "생성된 검색어 N"]
+        "query": ["생성된 검색어 1", "생성된 검색어 2", "생성된 검색어 3", ..., "생성된 검색어 N"]
     }}
-
+    ```
 """
 
-
-
-
 generate_prompt_system = """
-[입력 정보 요약]
-운영 기간: [operation_period]
-운영 시간: [operation_time]
-안내 방식: [instruction_type] (예: 상세 안내문, 카드뉴스, 문자 메시지 등)
-사용자 추가 요청: [user_additional_request]
-검색된 안전 정보 문서들: [documents]
+[역할 및 목표]
+너는 대한민국 최고의 안전 전문가로서, 행사 주최자가 등록한 정보를 바탕으로 '방문객을 위한 맞춤형 안전 안내문'을 작성하는 AI다.
+너의 임무는 아래 **[사용자 등록 정보]**와 **[검색된 안전 정보 문서]**를 종합하여, 방문객들이 행사를 안전하고 즐겁게 경험할 수 있도록 실용적이고 상세한 안전 가이드를 제공하는 것이다.
 
-[작업 수행 단계]
+[사용자 등록 정보]
+- 행사명: {place_name}
+- 행사 유형: {type}
+- 개최 지역: {region}
+- 행사 기간: {period}
+- 행사 설명: {description}
+- 카테고리: {category}
+- 주최측 제공 자료: {related_documents}
+- 비상 연락 담당자: {emergency_contact_name}
+- 비상 연락처: {emergency_contact_phone}
 
-1. 컨텍스트 분석:
-* 먼저 [운영 기간]과 [운영 시간]을 분석하여 시기적, 시간적 특성을 파악해.
-* (예: 7~8월 → 여름철, 폭염, 장마, 태풍 / 오전 10시~오후 6시 → 낮 시간대 활동)
-* 이 컨텍스트에서 발생할 확률이 가장 높은 안전사고 유형을 예측해봐.
+[검색된 안전 정보 문서]
+{searched_documents}
 
-2. 핵심 정보 선별:
-* [검색된 안전 정보 문서들] 중에서, 위에서 분석한 시기적/시간적 컨텍스트와 가장 관련성이 높은 정보들을 선별해.
-* [사용자 추가 요청]이 있다면, 해당 내용과 관련된 정보를 최우선으로 선별하고 가장 중요한 내용으로 다루어야 해.
 
-3. 안내 방식에 맞춰 재구성:
-* 선별된 핵심 정보들을 [안내 방식]에 지정된 형식에 맞춰 재구성하고 초안을 작성해.
-* '상세 안내문'일 경우: 제목, 개요, 본문(소제목과 글머리 기호 사용), 당부 말씀 등 격식 있고 체계적인 구조로 작성.
-* '방송'일 경우: 시민들이 쉽게 이해할 수 있도록 명확하고 간결한 문장으로, 주의사항과 행동 요령을 중심으로 방송문을 작성해. (예: "지금은 폭염특보가 발효 중입니다. 야외활동을 자제하고, 충분한 수분을 섭취하세요.")
-* '공지판' or 'None' 일 경우: 한눈에 들어오는 제목, 핵심 요점(글머리표 사용), 주의사항 등으로 구성된 공지문 형태로 작성해. (예: "폭염 시 행동 요령 - 1. 외출 자제 2. 물 자주 마시기 3. 노약자 각별히 주의")
-* '문자 메시지'일 경우: 글자 수 제한을 고려하여 가장 중요한 내용만을 짧고 명확하게 요약해서 작성해. (예: "폭염주의! 외출 자제, 물 자주 마시세요.")
+[안내문 작성 가이드라인]
 
-4. 최종 생성 및 검토:
-* 작성된 초안을 바탕으로, 최종 안전 안내문을 생성해.
-* 전체 내용이 [운영 기간], [운영 시간], [사용자 추가 요청] 등 모든 조건을 충실히 반영했는지 최종적으로 검토하고, 문장이 자연스러운지 확인해.
+1. **제목:**
+   - '`{place_name}` 방문객을 위한 안전 안내'와 같이 행사명을 포함하여 명확하게 작성한다.
+
+2. **행사 개요 및 핵심 안전 수칙:**
+   - `{place_name}` 행사는 `{period}` 동안 `{region}`에서 열리는 `{category}` 행사입니다. ({description} 내용 요약)
+   - 방문객이 가장 먼저 인지해야 할 핵심 안전 수칙 2~3가지를 요약하여 강조한다.
+
+3. **상세 안전 가이드:**
+   A. **공통 안전 수칙:**
+      - (예: 질서 유지, 개인 소지품 관리, 지정된 장소 외 흡연 금지)
+   B. **행사 유형({type}) 및 카테고리({category})별 안전 수칙:**
+      - 행사의 특성을 반영한 맞춤 안전 수칙을 제공한다. (예: 공연 - 압사 사고 예방, 축제 - 식중독 예방, 체험 - 시설물 안전)
+   C. **장소/시설 관련 안전 수칙:**
+      - 행사장 내 특정 구역(예: 무대 근처, 체험 부스)에서의 주의사항을 안내한다.
+      - 비상 대피로, 소화기, 의무실 위치를 설명한다.
+   D. **행사 기간({period}) 관련 안전 수칙:**
+      - 행사 기간의 계절적, 시기적 요인(예: 여름, 겨울, 야간)에 따른 대비책을 안내한다.
+
+4. **비상시 행동 요령:**
+   - 화재, 응급환자 발생, 시설물 붕괴 등 비상 상황 시 대처 방법을 구체적으로 설명한다.
+   - **비상 연락처:** 위급 상황 발생 시 즉시 `{emergency_contact_name}`({emergency_contact_phone})에게 연락하십시오.
+   - 주변 경찰서, 소방서 등 공공 안전기관 연락처를 함께 안내하면 좋습니다.
+
+5. **특별 고려 대상 안내:**
+   - 어린이, 노약자, 장애인 등 안전 취약 계층을 위한 편의시설 및 유의사항을 안내한다.
 
 [중요 규칙]
-근거 기반 생성: 반드시 [검색된 안전 정보 문서들]에 있는 내용을 활용하여 안내문을 작성해야 한다.
-창작 금지: 없는 사실이나 안전 수칙을 절대로 만들어내서는 안 된다.
-목적 부합성: 생성된 안내문은 사용자가 즉시 활용할 수 있을 만큼 명확하고, 실용적이며, 이해하기 쉬워야 한다.
-어조: 신뢰감을 주는 전문가의 어조를 유지하되, 시민들이 경각심을 가질 수 있도록 명료하고 단호한 표현을 사용해라.
+- **정확성:** 모든 정보는 **[사용자 등록 정보]**와 **[검색된 안전 정보 문서]**에 근거하여 작성한다.
+- **명확성:** 누구나 쉽게 이해할 수 있는 간결하고 명확한 표현을 사용한다.
+- **실용성:** 방문객이 실제 상황에서 즉시 활용할 수 있는 구체적인 행동 지침을 제공한다.
+- **신뢰성:** 행사 주최측의 공식 안내문으로서 신뢰도를 줄 수 있는 어조를 사용한다.
+- **구조화:** 제목, 소제목, 글머리 기호 등을 활용하여 가독성을 높인다.
+
+[출력 형식]
+- Markdown을 사용하여 명확하게 구조화된 안내문을 생성한다.
+"""
+
+final_answer_system = \
+"""
+당신은 텍스트를 깔끔하게 정리하는 AI입니다.
+주어진 [generation]는 내용과 citation([숫자])은 정확하지만, 줄바꿈이나 글머리 기호 같은 서식이 모두 사라진 상태입니다.
+
+당신의 임무는 [generation]의 내용과 citation을 유지하면서, 사용자가 읽기 쉽도록 서식을 복원하는 것입니다.
+
+**[규칙]**
+1.  **내용 보존:** 원본 텍스트의 모든 단어와 citation([숫자])을 빠짐없이 사용해야 합니다.
+2.  **서식 복원:** 문맥에 맞게 줄바꿈, 글머리 기호(*), 제목(##) 등의 마크다운 서식을 자연스럽게 추가해주세요.
+3.  **내용 수정 금지:** 원본에 없는 내용을 추가하거나, 기존 내용을 변경하지 마세요.
+4.  **출력:** 다른 설명 없이, 서식이 복원된 최종 텍스트만 출력합니다.
+5.  **인용 위치:** citation([숫자])은 문장이나 문단의 끝에만 표시하고, 마지막 문단이나 결론 부분에는 citation을 표시하지 않습니다.
 """
 
 
@@ -124,59 +162,102 @@ class GraphState(TypedDict):
     generation: Annotated[str, "LLM generated answer"]
     hallu_check: Annotated[dict, "Hallucination check result"]
     query_list: Annotated[List[str], "Query list"]
+    final_answer: Annotated[str, "Final answer"]
 
-    operation_period: Annotated[str, "Operation period"]
-    operation_time: Annotated[str, "Operation time"]
-    instruction_type: Annotated[str, "Instruction type"]
-    user_additional_request: Annotated[str, "User additional request"]
-    searched_documents: Annotated[List[str], "Documents"]
+    place_name: Annotated[str, "Place name"]
+    type: Annotated[str, "Type of place/event"]
+    region: Annotated[str, "Region"]
+    period: Annotated[str, "Period of event"]
+    description: Annotated[str, "Description"]
+    category: Annotated[str, "Category of event"]
+    related_documents: Annotated[str, "Related documents from user"]
+    emergency_contact_name: Annotated[str, "Emergency contact name"]
+    emergency_contact_phone: Annotated[str, "Emergency contact phone"]
+    searched_documents: Annotated[List[str], "Documents from vector store"]
 
 class form_chain():
     def __init__(self):
         # 빠른 응답 및 간단한 작업용 LLM
         self.fast_llm = ChatVertexAI(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.5-flash-lite",
             temperature=0.1,
             max_output_tokens=512,
             verbose=True,
         )
         # 답변 생성 및 Grounding 확인용 LLM
         self.generate_llm = ChatVertexAI(
-            model_name="gemini-1.5-flash", # Grounding을 지원하는 최신 모델 사용 권장
+            model_name="gemini-2.5-flash", # Grounding을 지원하는 최신 모델 사용 권장
             temperature=0.4,
+            verbose=True,
+        )
+        self.final_llm = ChatVertexAI(
+            model_name="gemini-2.5-flash-lite",
+            temperature=0,
             verbose=True,
         )
         self.graph = StateGraph(GraphState)
         # Grounding Wrapper 설정
         self.checker = VertexAICheckGroundingWrapper(        
             project_id = os.getenv("PROJECT_ID"),
-            location_id = "asia-northeast1",
+            location_id = "us-central1",
             grounding_config="default_grounding_config",   # 기본값
             citation_threshold=0.5,
             credentials=credentials,
         )
-
-    def query_generate(self, operation_period: str, operation_time: str, user_additional_request: Optional[str] = None, instruction_type: Optional[str] = None) -> str:
-        generate_prompt = ChatPromptTemplate.from_messages([
-            ("system", query_generator_system),
-            ("user",   "chat operation_period: {operation_period} \n operation_time: {operation_time} \n user_additional_request: {user_additional_request}")
-        ])
+########################################################################################################################
+# 체인 정의
+########################################################################################################################
+    def query_generate(self, place_name: str, type: str, region: str, period: str, description: str, category: str, related_documents: str) -> str:
+        generate_prompt = ChatPromptTemplate.from_template(query_generator_system)
         chain = generate_prompt | self.generate_llm | JsonOutputParser()
-        query_list = chain.invoke({"operation_period": operation_period, "operation_time": operation_time, "user_additional_request": user_additional_request})
+        query_list = chain.invoke({
+            "place_name": place_name,
+            "type": type,
+            "region": region,
+            "period": period,
+            "description": description,
+            "category": category,
+            "related_documents": related_documents
+        })
         return query_list.get("query")
     
-    def generate(self, operation_period: Optional[str] = None, operation_time: Optional[str] = None, instruction_type: Optional[str] = None, user_additional_request: Optional[str] = None, documents: List[str] = None) -> str:
-        generate_prompt = ChatPromptTemplate.from_messages([
-            ("system", generate_prompt_system),
-            ("user",   "operation_period: {operation_period} \n operation_time: {operation_time} \n instruction_type: {instruction_type} \n user_additional_request: {user_additional_request} \n documents: {documents}")
-        ])
+    def generate(self, place_name: str, type: str, region: str, period: str, description: str, category: str, related_documents: str, emergency_contact_name: str, emergency_contact_phone: str, searched_documents: List[str]) -> str:
+        generate_prompt = ChatPromptTemplate.from_template(generate_prompt_system)
         chain = generate_prompt | self.generate_llm | StrOutputParser()
-        generation = chain.invoke({"operation_period": operation_period, "operation_time": operation_time, "instruction_type": instruction_type, "user_additional_request": user_additional_request, "documents": documents})
+        generation = chain.invoke({
+            "place_name": place_name,
+            "type": type,
+            "region": region,
+            "period": period,
+            "description": description,
+            "category": category,
+            "related_documents": related_documents,
+            "emergency_contact_name": emergency_contact_name,
+            "emergency_contact_phone": emergency_contact_phone,
+            "searched_documents": searched_documents
+        })
         return generation
 
+    def clean_up_answer_with_citations(self, generation: str) -> str:
+        prompt = ChatPromptTemplate.from_messages([("system", final_answer_system), ("user", "[generation]: \n{generation}")])
+        chain = prompt | self.final_llm | StrOutputParser()
+        return chain.invoke({"generation": generation})
 
+
+########################################################################################################################
+# 그래프 노드 정의
+########################################################################################################################
+ 
     def query_generator(self, state: GraphState) -> GraphState:
-        query_list = self.query_generate(state["operation_period"], state["operation_time"], state["user_additional_request"])
+        query_list = self.query_generate(
+            state["place_name"],
+            state["type"],
+            state["region"],
+            state["period"],
+            state["description"],
+            state["category"],
+            state["related_documents"]
+        )
         return {**state, "query_list": query_list}
 
     def search_document(self, state: GraphState) -> GraphState:
@@ -195,7 +276,18 @@ class form_chain():
         return {**state, "searched_documents": unique_documents}
 
     def generator(self, state: GraphState) -> GraphState:
-        generation = self.generate(state["operation_period"], state["operation_time"], state["instruction_type"], state["user_additional_request"], state["searched_documents"])
+        generation = self.generate(
+            state["place_name"],
+            state["type"],
+            state["region"],
+            state["period"],
+            state["description"],
+            state["category"],
+            state["related_documents"],
+            state["emergency_contact_name"],
+            state["emergency_contact_phone"],
+            state["searched_documents"]
+        )
         return {**state, "generation": generation}
 
     def hallu_checker(self, state: GraphState) -> GraphState:
@@ -217,6 +309,15 @@ class form_chain():
         else:
             return "query_generator"
 
+    def answer_beautifier(self, state: GraphState) -> GraphState:
+        final_answer = state["hallu_check"].answer_with_citations
+        final_answer = self.clean_up_answer_with_citations(final_answer)
+        return {**state, "final_answer": final_answer}
+
+########################################################################################################################
+# 그래프 노드 연결
+########################################################################################################################
+
     def link_nodes(self):
         """
         LangGraph의 노드들을 연결하여 그래프를 구성합니다.
@@ -225,18 +326,21 @@ class form_chain():
         self.graph.add_node("search_document", self.search_document)
         self.graph.add_node("generator", self.generator)
         self.graph.add_node("hallu_checker", self.hallu_checker)
+        self.graph.add_node("answer_beautifier", self.answer_beautifier)
 
         self.graph.add_edge(START, "query_generator")
         self.graph.add_edge("query_generator", "search_document")
         self.graph.add_edge("search_document", "generator")
         self.graph.add_edge("generator", "hallu_checker")
-        self.graph.add_conditional_edges(
-            "hallu_checker",
-            self.check_hallu_complete_form,
-            {
-                END: END,
-                "query_generator": "query_generator"
-            }
-        )
+        # self.graph.add_conditional_edges(
+        #     "hallu_checker",
+        #     self.check_hallu_complete_form,
+        #     {
+        #         END: END,
+        #         "query_generator": "query_generator"
+        #     }
+        # )
+        self.graph.add_edge("hallu_checker", "answer_beautifier")
+        self.graph.add_edge("answer_beautifier", END)
         # 컴파일된 그래프 반환
         return self.graph.compile(checkpointer=MemorySaver())

@@ -14,20 +14,20 @@ from .vector_store import store_vector_db
 import os
 import warnings
 import json
-# .env 파일 로드
+import re
 
+# .env 파일 로드
 os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "True"
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
 os.environ["PROJECT_ID"] = os.getenv("PROJECT_ID")
-os.environ["GOOGLE_CLOUD_LOCATION"] = "asia-northeast1"
+os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 credential_path = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
 credentials = service_account.Credentials.from_service_account_file(credential_path)
 warnings.filterwarnings("ignore")
 
 # Vertex AI 초기화
-
-vertexai.init(project=os.getenv("PROJECT_ID"), location="asia-northeast1")
+vertexai.init(project=os.getenv("PROJECT_ID"), location="us-central1")
 
 # Vector Store 로드
 vector_store = store_vector_db()
@@ -38,7 +38,7 @@ re_write_system = """
 당신의 역할은 사용자의 query를 키워드 중심으로 재작성하는 것입니다.
 절대 답변을 생성하거나, chat_history을 요약·설명하거나, query 외의 어떤 정보도 추가하지 마세요.
 
-- query에 있는 대명사/지시어(이것, 그것, 그 보직 등)는 chat history에서 언급된 명사(특기/보직명 등)로 치환하세요.
+- query에 있는 대명사/지시어(이것, 그것, 그 보직 등)는 chat history에서 언급된 명사로 치환하세요.
 - query가 이미 명확하면 수정하지 말고 그대로 반환하세요.
 - 새로운 정보, 불필요한 설명, 반복, 수식어, 예시, 답변, 안내문구는 절대 추가하지 마세요.
 - 오직 재작성된 query만, 한 문장으로 반환하세요.
@@ -89,6 +89,19 @@ generate_prompt_system = """
         *친절한 전문가 어조: '안전 지키미'로서 전문적이면서도, 누구나 이해하기 쉬운 친절하고 명확한 말투를 사용해줘.
 """
 
+final_answer_system = """
+당신은 텍스트를 깔끔하게 정리하는 AI입니다.
+주어진 [Raw Text]는 내용과 citation([숫자])은 정확하지만, 줄바꿈이나 글머리 기호 같은 서식이 모두 사라진 상태입니다.
+
+당신의 임무는 [Raw Text]의 내용과 citation을 그대로 유지하면서, 사용자가 읽기 쉽도록 서식을 복원하는 것입니다.
+
+**[규칙]**
+1.  **내용 보존:** 원본 텍스트의 모든 단어와 citation([숫자])을 빠짐없이 사용해야 합니다.
+2.  **서식 복원:** 문맥에 맞게 줄바꿈, 글머리 기호(*), 제목(##) 등의 마크다운 서식을 자연스럽게 추가해주세요.
+3.  **내용 수정 금지:** 원본에 없는 내용을 추가하거나, 기존 내용을 변경하지 마세요.
+4.  **출력:** 다른 설명 없이, 서식이 복원된 최종 텍스트만 출력합니다.
+"""
+
 class GraphState(TypedDict):
     question: Annotated[str, "User question"]
     decomposed_question: Annotated[List[str], "Decomposed question"]
@@ -96,63 +109,42 @@ class GraphState(TypedDict):
     document: Annotated[List[str], "Combined documents"]
     generation: Annotated[str, "LLM generated answer"]
     hallu_check: Annotated[dict, "Hallucination check result"]
+    final_answer: Annotated[str, "Final answer with citations"]
 
 class chat_chain():
     def __init__(self):
-        # 빠른 응답 및 간단한 작업용 LLM
-        self.fast_llm = ChatVertexAI(
-            model_name="gemini-1.5-flash",
-            temperature=0.1,
-            max_output_tokens=512,
-            verbose=True,
-        )
-        # 답변 생성 및 Grounding 확인용 LLM
-        self.generate_llm = ChatVertexAI(
-            model_name="gemini-2.5-flash", # Grounding을 지원하는 최신 모델 사용 권장
-            temperature=0.4,
-            verbose=True,
-        )
+        self.simple_llm = ChatVertexAI(model_name="gemini-2.5-flash-lite", temperature=0.1, max_output_tokens=512, verbose=True)
+        self.generate_llm = ChatVertexAI(model_name="gemini-2.5-flash-lite", temperature=0.4, verbose=True)
+        self.final_llm = ChatVertexAI(model_name="gemini-2.5-flash-lite", temperature=0, verbose=True)
         self.graph = StateGraph(GraphState)
-        # Grounding Wrapper 설정
-        self.checker = VertexAICheckGroundingWrapper(        
-            project_id = os.getenv("PROJECT_ID"),
-            location_id = "asia-northeast1",
-            grounding_config="default_grounding_config",   # 기본값
+        self.checker = VertexAICheckGroundingWrapper(
+            project_id=os.getenv("PROJECT_ID"),
+            location_id="us-central1",
+            grounding_config="default_grounding_config",
             citation_threshold=0.5,
             credentials=credentials,
         )
 
     def re_write(self, chat_history: str, query: str) -> str:
-        """
-        사용자의 질문을 키워드 중심으로 재작성하는 체인
-        """
-        rewrite_prompt = ChatPromptTemplate.from_messages([
-            ("system", re_write_system),
-            ("user",   "chat history: \n {chat_history} \n\n query: \n {query}")
-        ])
-        chain = rewrite_prompt | self.fast_llm | StrOutputParser() | RunnableLambda(lambda text: text.strip())
+        rewrite_prompt = ChatPromptTemplate.from_messages([("system", re_write_system), ("user", "chat history: \n {chat_history} \n\n query: \n {query}")])
+        chain = rewrite_prompt | self.simple_llm | StrOutputParser() | RunnableLambda(lambda text: text.strip())
         return chain.invoke({"chat_history": chat_history, "query": query})
 
     def question_decompose(self, query: str) -> List[str]:
-        """
-        사용자의 질문을 독립적으로 답변할 수 있는 여러 개의 단순한 질문으로 분해하는 체인
-        """
-        question_decomposer_prompt = ChatPromptTemplate.from_messages([
-            ("system", question_decomposer_system),
-            ("user",   "query: {query}")
-        ])
-        chain = question_decomposer_prompt | self.fast_llm | StrOutputParser() | RunnableLambda(lambda text: text.strip())
-        result= chain.invoke({"query": query})
-        result = json.loads(result)
-        return result
-    
+        question_decomposer_prompt = ChatPromptTemplate.from_messages([("system", question_decomposer_system), ("user", "query: {query}")])
+        chain = question_decomposer_prompt | self.simple_llm | StrOutputParser() | RunnableLambda(lambda text: text.strip())
+        result = chain.invoke({"query": query})
+        return json.loads(result)
+
     def generate(self, query: str, document: List[str]) -> str:
-        generate_prompt = ChatPromptTemplate.from_messages([
-            ("system", generate_prompt_system),
-            ("user",   "query: {query} \n document: {document}")
-        ])
+        generate_prompt = ChatPromptTemplate.from_messages([("system", generate_prompt_system), ("user", "query: {query} \n document: {document}")])
         chain = generate_prompt | self.generate_llm | StrOutputParser()
         return chain.invoke({"query": query, "document": document})
+
+    def clean_up_answer_with_citations(self, raw_text: str) -> str:
+        prompt = ChatPromptTemplate.from_messages([("system", final_answer_system), ("user", "[Raw Text]: {raw_text}")])
+        chain = prompt | self.final_llm | StrOutputParser()
+        return chain.invoke({"raw_text": raw_text})
 
     def re_writer(self, state: GraphState) -> GraphState:
         rewritten = self.re_write(state["chat_history"], state["question"])
@@ -166,8 +158,6 @@ class chat_chain():
         searched_documents = []
         for decomposed_question in state["decomposed_question"]:
             searched_documents.extend(vector_store.search(decomposed_question, k=50))
-        
-        # 중복 문서 제거
         unique_documents = []
         seen_contents = set()
         for doc in searched_documents:
@@ -175,7 +165,6 @@ class chat_chain():
                 unique_documents.append(doc)
                 seen_contents.add(doc['document'])
         searched_documents = unique_documents
-        
         searched_documents = vector_store.document_rerank(state["question"], searched_documents, k=25)
         return {**state, "document": searched_documents}
 
@@ -184,47 +173,52 @@ class chat_chain():
         return {**state, "generation": generation}
 
     def hallu_checker(self, state: GraphState) -> GraphState:
-        hallu_check = self.checker.invoke(
-            state["generation"],
-            config = {"configurable": {"documents": state["document"]}}
-        )
-        return {**state, "hallu_check": hallu_check}
+        hallu_check_result = self.checker.invoke(state["generation"], config={"configurable": {"documents": state["document"]}})
+        return {**state, "hallu_check": hallu_check_result}
+
+    def answer_beautifier(self, state: GraphState) -> GraphState:
+        # CheckGroundingResponse 객체의 .answer_with_citations 속성에 직접 접근
+        raw_text = state["hallu_check"].answer_with_citations
+        
+        # citation 번호를 1부터 시작하도록 조정
+        def replace_citation(match):
+            number = int(match.group(1))
+            return f"[{number + 1}]"
+        adjusted_text = re.sub(r'\[(\d+)\]', replace_citation, raw_text)
+        
+        cleaned_answer = self.clean_up_answer_with_citations(adjusted_text)
+        return {**state, "final_answer": cleaned_answer}
 
     def check_hallu_complete_chat(self, state: GraphState) -> str:
-        """
-        Grounding 확인 결과를 바탕으로 다음 단계를 결정합니다.
-        """
-        result = state["hallu_check"]
-        score = result.support_score
-        # 평균 점수가 0.5를 넘으면 종료, 아니면 재시도
+        # CheckGroundingResponse 객체의 .support_score 속성에 직접 접근
+        score = state["hallu_check"].support_score
         if score >= 0.5:
-            return END
+            return "clean"
         else:
             return "re_writer"
 
     def link_nodes(self):
-        """
-        LangGraph의 노드들을 연결하여 그래프를 구성합니다.
-        """
         self.graph.add_node("re_writer", self.re_writer)
         self.graph.add_node("question_decomposer", self.question_decomposer)
         self.graph.add_node("search_document", self.search_document)
         self.graph.add_node("generator", self.generator)
         self.graph.add_node("hallu_checker", self.hallu_checker)
+        self.graph.add_node("answer_beautifier", self.answer_beautifier)
 
         self.graph.add_edge(START, "re_writer")
         self.graph.add_edge("re_writer", "question_decomposer")
         self.graph.add_edge("question_decomposer", "search_document")
         self.graph.add_edge("search_document", "generator")
         self.graph.add_edge("generator", "hallu_checker")
-
+        
         self.graph.add_conditional_edges(
             "hallu_checker",
-            self.check_hallu_complete_chat, # 함수 객체 자체를 전달
+            self.check_hallu_complete_chat,
             {
-                END: END,
+                "clean": "answer_beautifier",
                 "re_writer": "re_writer"
             }
         )
-        # 컴파일된 그래프 반환
+        self.graph.add_edge("answer_beautifier", END)
+
         return self.graph.compile(checkpointer=MemorySaver())

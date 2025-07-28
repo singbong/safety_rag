@@ -1,170 +1,285 @@
-# Safety RAG (소방 재난 정보 RAG)
+# PDF 기반 질의응답 RAG 시스템
 
-소방 및 재난 안전 관련 문서에 대한 질문에 답변하는 RAG(Retrieval-Augmented Generation) 시스템입니다. LangGraph와 Google Gemini 모델을 기반으로 구축되었습니다.
+이 프로젝트는 PDF 문서 내용을 기반으로 사용자의 질문에 답변하는 RAG(Retrieval-Augmented Generation, 검색 증강 생성) 시스템입니다. Google Gemini 모델과 LangChain 프레임워크를 활용하여 구현되었습니다.
 
-## 1. 사용 준비 사항
+## 주요 기능
 
-이 시스템을 로컬 환경이나 서버에서 실행하기 위해 필요한 준비 과정입니다.
+- **문서 처리**: PDF 파일을 텍스트로 변환하고 의미 기반으로 분할(Semantic Chunking)합니다.
+- **벡터 임베딩**: 처리된 텍스트를 벡터로 변환하여 FAISS 벡터 스토어에 저장합니다.
+- **질의응답**: 저장된 벡터 데이터를 기반으로 사용자의 질문에 가장 관련성 높은 답변을 생성합니다.
+- **다양한 인터페이스**: 일반 채팅, 양식(Form) 기반 채팅 등 여러 종류의 대화 체인을 제공합니다.
+- **컨테이너 기반**: Docker 및 Docker Compose를 사용하여 프로젝트 환경을 쉽게 구성하고 실행할 수 있습니다.
 
-### 1.1. 필수 설치 요소
+## 기술 스택
 
-- **Docker 및 Docker Compose:** 애플리케이션을 컨테이너 환경에서 실행하기 위해 필요합니다.
-- **Python 3.11+:** 데이터 전처리 스크립트 실행을 위해 필요합니다.
-- **Google Cloud 계정 및 프로젝트:** Gemini API와 Vertex AI 서비스를 사용하기 위해 필요합니다.
+-   **언어**: Python 3
+-   **핵심 프레임워크**:
+    -   `LangChain` & `LangGraph`: RAG 파이프라인 및 복잡한 Agent 로직 구성
+    -   `FastAPI`: API 서버 구축
+-   **AI & 머신러닝**:
+    -   `google-generativeai` & `google-cloud-aiplatform`: Google Gemini 모델 API 활용
+    -   `langchain-google-vertexai`: LangChain과 Vertex AI 통합
+    -   `FAISS`: 벡터 데이터베이스 (유사도 검색)
+    -   `transformers` & `sentence-transformers`: 자연어 처리 및 임베딩
+-   **데이터 처리**:
+    -   `pdfplumber`: PDF 텍스트 추출
+    -   `pandas`, `numpy`: 데이터 조작 및 분석
+-   **CLI & 배포**:
+    -   `google-fire`: 커맨드 라인 인터페이스 구축
+    -   `Docker` & `docker-compose`: 컨테이너 기반 배포 및 실행 환경
+    -   `uvicorn`: ASGI 서버
 
-### 1.2. 환경 설정
+## 프로젝트 구조
 
-1.  **저장소 복제(Clone)**
+```
+.
+├── .env                    # API 키, 프로젝트 ID 등 환경 변수 설정 파일
+├── .git/                   # Git 버전 관리 시스템 디렉토리
+├── .gitignore              # Git 추적 제외 목록 파일
+├── docker-compose.yml      # Docker 다중 컨테이너 실행을 위한 설정 파일
+├── Dockerfile              # 애플리케이션 Docker 이미지 빌드 설정 파일
+├── fire_app.py             # FastAPI 서버 실행 및 CLI 명령어 처리를 위한 메인 스크립트
+├── README.md               # 프로젝트 설명 문서 (현재 파일)
+├── requirements.txt        # Python 패키지 의존성 목록
+└── vector/                 # 데이터 처리 및 RAG 로직 관련 디렉토리
+    ├── data/               # 데이터 저장 디렉토리
+    │   ├── chunked_docs/   # 의미 기반으로 분할된 문서 조각(.pkl) 저장 위치
+    │   ├── contextual_content_docs/ # 컨텍스트 요약이 추가된 문서 조각(.pkl) 저장 위치
+    │   ├── original_full_text/    # PDF에서 추출된 원본 텍스트(.txt) 저장 위치
+    │   ├── original_pdf/          # 분석할 원본 PDF 문서 저장 위치
+    │   └── vector_store/          # 생성된 FAISS 벡터 DB(.index, .pkl) 저장 위치
+    └── definition/         # RAG 파이프라인의 핵심 로직 정의 디렉토리
+        ├── chain_for_chat.py      # 일반 채팅 RAG 체인 정의
+        ├── chain_for_form.py      # 양식(Form) 기반 안전 안내문 생성 체인 정의
+        ├── chain_for_form_chat.py # 생성된 안내문에 대한 후속 질문 처리 체인 정의
+        ├── make_context.py        # 문서 조각에 대한 컨텍스트 요약 생성 스크립트
+        ├── make_contextual_content_with_caching.py # 캐싱을 적용하여 컨텍스트 요약을 생성하는 스크립트
+        ├── make_docs.py           # 텍스트를 의미 기반으로 분할하는 스크립트
+        ├── make_full_text.py      # PDF에서 전체 텍스트를 추출하는 스크립트
+        ├── semantic_split_genai.py # GenAI 모델을 사용한 의미 기반 분할 유틸리티
+        ├── semantic_split_vertex.py# Vertex AI 모델을 사용한 의미 기반 분할 유틸리티
+        └── vector_store.py        # FAISS 벡터 DB 생성, 저장, 로드 및 검색/재순위 로직 관리
+```
+
+## 설치 및 실행 방법
+
+### 사전 준비 사항
+
+- [Docker](https://www.docker.com/get-started)와 [Docker Compose](https://docs.docker.com/compose/install/)가 설치되어 있어야 합니다.
+- Google Cloud API 키가 필요합니다.
+
+### 실행 절차
+
+1.  **프로젝트 복제**
+
     ```bash
-    git clone <저장소_URL>
-    cd fire_rag
+    git clone https://github.com/singbong/safety_rag.git
+    cd safety_rag
     ```
 
-2.  **Python 가상환경 및 의존성 설치**
-    ```bash
-    python -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    ```
+2.  **환경 변수 설정**
 
-3.  **Google Cloud 인증 정보 설정**
-    - Google Cloud Platform에서 서비스 계정을 생성하고 JSON 키 파일을 다운로드합니다.
-    - 다운로드한 키 파일을 저장하고 그 경로를 .env 파일에 입력합니다. **(주의: 이 파일은 gitignore에 등록되어 있어야 합니다.)**
+    프로젝트 루트 디렉터리에 `.env` 파일을 생성하고 다음과 같이 Google API 키를 추가합니다.
 
-4.  **.env 파일 생성**
-    - `fire_rag` 디렉토리 최상단에 `.env` 파일을 생성하고 아래 내용을 채웁니다.
     ```env
-    # .env 파일 예시
-    PROJECT_ID="your-gcp-project-id"
-    GOOGLE_API_KEY="your-google-api-key"
-    GOOGLE_APPLICATION_CREDENTIALS="your-google-application-credentials-path"
-
-    # LangSmith (선택 사항)
-    LANGCHAIN_TRACING="true"
-    LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
-    LANGCHAIN_API_KEY="your-langsmith-api-key"
-    LANGCHAIN_PROJECT="your_project_name"
+    GOOGLE_API_KEY="YOUR_GOOGLE_API_KEY"
+    PROJECT_ID="YOUR_PROJECT_ID"
+    GOOGLE_APPLICATION_CREDENTIALS="PATH/TO/YOUR/CREDENTIALS.json"
     ```
+    *`docker-compose.yml` 파일에서 이 `.env` 파일을 참조하여 컨테이너 내에 환경 변수를 설정합니다.*
 
-### 1.3. 데이터 전처리 및 벡터 DB 생성
+3.  **Docker 컨테이너 빌드 및 실행**
 
-1.  **원본 PDF 파일 준비**
-    - 답변의 근거 자료가 될 PDF 파일들을 `vector/data/original_pdf/` 디렉토리에 넣습니다.(original_pdf 파일이 없다면 생성하세요)
-
-2.  **데이터 처리 스크립트 실행**
-    - `vector/definition/` 디렉토리로 이동하여 아래 스크립트들을 순서대로 실행합니다. 이 과정은 PDF에서 텍스트를 추출하고, 의미 기반으로 문서를 분할한 뒤, 각 청크에 대한 요약 컨텍스트를 생성하고, 최종적으로 벡터 데이터베이스를 구축합니다.
     ```bash
-    cd vector/definition/
-
-    # 1. PDF -> 전체 텍스트 추출
-    python make_full_text.py
-
-    # 2. 전체 텍스트 -> 의미 기반 청킹
-    python make_docs.py
-
-    # 3. 청크 -> 컨텍스트 요약 생성
-    python make_context.py
-
-    # 4. 컨텍스트가 추가된 청크 -> 벡터 DB 생성
-    python vectore_store.py
+    docker-compose up --build -d
     ```
-    - 위 과정이 모두 성공적으로 완료되면 `vector/data/vector_store/` 디렉토리에 FAISS 인덱스 파일(`.index`)과 문서 데이터 파일(`.pkl`)이 생성됩니다.
 
-### 1.4. 애플리케이션 실행
+## 사용 방법
 
-- **Docker Compose 사용 (권장)**
-  - `fire_rag` 디렉토리 최상단에서 아래 명령어를 실행합니다.
-  ```bash
-  docker-compose up --build -d
-  ```
+### 1. 데이터 준비
 
-- **직접 실행**
-  - `fire_rag` 디렉토리 최상단에서 Uvicorn을 사용하여 직접 실행할 수 있습니다.
-  ```bash
-  uvicorn fire_app:app --host 0.0.0.0 --port 8000
-  ```
+`vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
 
-## 2. 기술 상세 설명
+### 2. 문서 처리 및 벡터화
 
-### 2.1. 문서 처리 및 벡터화
+다음 명령어를 실행하여 PDF 문서를 처리하고 벡터 스토어를 생성합니다. 이 과정은 `make_docs` 파이프라인을 통해 진행됩니다.
 
-1.  **텍스트 추출:** `pdfplumber`를 사용하여 원본 PDF에서 텍스트와 페이지 번호 등 메타데이터를 추출합니다.
-2.  **의미 기반 분할 (Semantic Chunking):**
+```bash
+docker-compose run --rm app python fire_app.py make_docs
+```
+*`--rm` 옵션은 명령어 실행 후 컨테이너를 자동으로 삭제합니다.*
+
+### 3. 채팅 시작
+
+문서 처리가 완료되면 다음 명령어를 통해 대화형 질의응답을 시작할 수 있습니다.
+
+```bash
+docker-compose run --rm app python fire_app.py chat
+```
+
+## 기술 상세 설명
+
+### 문서 처리 및 벡터화
+
+-   **텍스트 추출**: `pdfplumber`를 사용하여 원본 PDF에서 텍스트와 페이지 번호 등 메타데이터를 추출합니다.
+-   **의미 기반 분할 (Semantic Chunking)**:
     -   `Langchain`의 `SemanticChunker`와 Google의 `gemini-embedding-001` 모델을 사용하여 문서를 의미적 경계에 따라 1차적으로 분할합니다.
-    -   분할된 청크가 Gemini 모델의 토큰 제한(2048 토큰)을 초과할 경우, 토큰 수를 기준으로 하는 `RecursiveCharacterTextSplitter`와 유사한 방식으로 추가 분할하여 모든 청크가 토큰 제한을 준수하도록 합니다.
-3.  **컨텍스트 보강 (Contextual Enrichment):**
+    -   분할된 청크가 Gemini 모델의 토큰 제한(2048 토큰)을 초과할 경우, `RecursiveCharacterTextSplitter`와 유사한 방식으로 추가 분할하여 모든 청크가 토큰 제한을 준수하도록 합니다.
+-   **컨텍스트 보강 (Contextual Enrichment)**:
     -   각 청크의 검색 정확도를 높이기 위해, `gemini-1.5-flash` 모델을 사용하여 전체 문서의 내용을 참조하여 각 청크에 대한 한 문장 요약 컨텍스트를 생성합니다.
     -   이 과정에서 Google GenAI의 Caching API를 활용하여 전체 문서 텍스트를 캐시에 저장함으로써, 반복적인 API 호출 비용과 시간을 절약합니다.
-4.  **벡터화:**
+-   **벡터화**:
     -   컨텍스트가 보강된 텍스트(`"컨텍스트 요약 : 원본 청크 내용"`)를 `gemini-embedding-001` 모델을 통해 임베딩 벡터로 변환합니다.
     -   생성된 벡터는 `FAISS` (IndexFlatL2)를 사용하여 벡터 데이터베이스에 저장됩니다.
 
-### 2.2. 검색 및 재순위 (Retrieval & Reranking)
+### 검색 및 재순위 (Retrieval & Reranking)
 
-1.  **하이브리드 검색 (Hybrid Search):**
+-   **하이브리드 검색 (Hybrid Search)**:
     -   `Langchain`의 `EnsembleRetriever`를 사용하여 두 가지 검색 방식을 결합합니다.
-    -   **의미 검색 (Semantic Search):** FAISS 벡터 저장소를 사용하여 사용자의 질문과 의미적으로 유사한 문서를 찾습니다. (가중치 70%)
-    -   **키워드 검색 (Keyword Search):** `BM25Retriever`를 사용하여 질문에 포함된 핵심 키워드와 일치하는 문서를 찾습니다. (가중치 30%)
+    -   **의미 검색 (Semantic Search)**: FAISS 벡터 저장소를 사용하여 사용자의 질문과 의미적으로 유사한 문서를 찾습니다. (가중치 70%)
+    -   **키워드 검색 (Keyword Search)**: `BM25Retriever`를 사용하여 질문에 포함된 핵심 키워드와 일치하는 문서를 찾습니다. (가중치 30%)
     -   이 두 가지 방식의 결과를 결합하여 초기 검색 결과(150개)를 생성합니다.
-
-2.  **재순위 (Reranking):**
+-   **재순위 (Reranking)**:
     -   초기 검색된 150개의 문서를 `VertexAIRank` 모델을 사용하여 질문과의 관련성이 높은 순으로 재정렬합니다.
-        -   `VertexAIRank`는 Google Cloud Vertex AI에서 제공하는 의미 기반 랭킹(semantic reranking) 서비스로, 쿼리(질문)와 각 문서(청크) 간의 의미적 유사도를 정밀하게 평가하여 점수를 부여합니다.
-        -   VertexAIRank에서 사용하는 임베딩 및 랭킹 모델은 `semantic-ranker-default-004`입니다. 이 모델은 쿼리(query)와 문서(document) 모두에 대해 1024토큰까지 임베딩을 생성하고, 최신 LLM 기반의 의미적 비교를 통해 쿼리-문서 쌍의 관련성을 평가합니다. (공식 문서 및 Vertex AI 콘솔 기준)
-        -   단순 키워드 일치가 아니라, 쿼리와 문서의 의미적 맥락을 반영하여 랭킹을 수행하므로, BM25나 TF-IDF 등 전통적 방식보다 훨씬 더 정밀한 의미 기반 랭킹이 가능합니다.
-        -   VertexAIRank는 Vertex AI 플랫폼에서 제공하는 관리형 서비스로, 대규모 데이터셋과 다양한 도메인에 대해 높은 성능과 확장성을 보장합니다.
+    -   `VertexAIRank`는 Google Cloud Vertex AI에서 제공하는 의미 기반 랭킹 서비스로, `semantic-ranker-default-004` 모델을 사용하여 쿼리와 문서 간의 의미적 유사도를 정밀하게 평가합니다.
     -   최종적으로 가장 관련성이 높은 상위 20개의 문서를 답변 생성에 사용합니다.
 
-### 2.3. 답변 생성 및 검증 (Generation & Verification)
+## 주요 로직 (Chains)
 
-이 시스템은 `LangGraph`를 사용하여 다음과 같은 단계적 체인(Chain)을 구성합니다.
+이 프로젝트는 LangGraph를 사용하여 세 가지 다른 목적의 RAG(검색 증강 생성) 체인을 구현합니다. 각 체인은 특정 시나리오에 맞춰진 노드(Node)들의 그래프로 구성되어 있으며, 환각(Hallucination) 현상을 최소화하기 위해 Vertex AI의 Grounding 기능을 활용합니다.
 
-1.  **질문 재작성 (Query Rewriting):** `gemini-1.5-flash` 모델이 이전 대화 기록(`chat_history`)을 참고하여 사용자의 현재 질문에 포함된 대명사 등을 명확한 키워드로 치환하여 검색에 더 적합한 질문으로 재작성합니다.
-2.  **질문 분해 (Query Decomposition):** 재작성된 질문이 복잡할 경우(예: "A와 B에 대해 알려줘"), `gemini-1.5-flash` 모델이 이를 독립적으로 답변할 수 있는 여러 개의 단순한 질문(예: "A에 대해 알려줘", "B에 대해 알려줘")으로 분해합니다.
-3.  **문서 검색 및 재순위:** 분해된 질문들을 사용하여 위에서 설명한 하이브리드 검색 및 재순위 과정을 통해 관련 문서를 찾습니다.
-4.  **답변 생성:** 검색된 최종 문서를 근거 자료로 하여, `gemini-2.5-flash` 모델이 사용자의 질문에 대한 최종 답변을 생성합니다.
-5.  **환각 검증 (Hallucination Check):**
-    -   생성된 답변이 근거 문서에 기반했는지 확인하기 위해 `VertexAICheckGroundingWrapper`를 사용합니다.
-    -   답변의 각 문장이 근거 문서에 의해 얼마나 뒷받침되는지를 나타내는 `support_score`를 계산합니다.
-    -   이 점수가 0.5 미만일 경우, 답변의 신뢰도가 낮다고 판단하여 그래프는 다시 **질문 재작성** 단계로 돌아가 더 나은 답변을 생성하려고 시도합니다. 이 과정을 통해 답변의 정확성과 신뢰도를 높입니다.
+### 1. `chain_for_chat.py`: 일반 채팅 체인
 
-## API 사용 예제 (Python)
+일반적인 대화형 질의응답을 처리하는 가장 기본적인 RAG 체인입니다.
 
-아래는 Python의 `requests` 라이브러리를 사용하여 API를 호출하는 예제입니다.
+-   **주요 역할**: 사용자의 질문 의도를 명확히 하고, 관련 문서를 찾아 신뢰도 높은 답변을 생성합니다.
+-   **작동 흐름**:
+    1.  **질문 재작성 (Re-writer)**: 대화 기록을 참고하여 사용자의 질문에 포함된 대명사(예: '그것')를 구체적인 용어로 바꾸어 명확하게 만듭니다.
+    2.  **질문 분해 (Question Decomposer)**: 복잡한 질문을 여러 개의 단순한 하위 질문으로 분해하여 검색 정확도를 높입니다.
+    3.  **문서 검색 (Search Document)**: 분해된 질문들을 사용하여 벡터 스토어에서 관련 문서를 검색하고, Reranker를 통해 최종 답변에 사용할 문서의 순위를 재조정합니다.
+    4.  **답변 생성 (Generator)**: 검색된 문서를 바탕으로 '안전 지키미 AI' 역할을 수행하며, 질문에 대한 직접적인 답변과 함께 알아두면 좋은 추가 정보를 생성합니다.
+    5.  **Grounding 확인 (Hallucination Checker)**: 생성된 답변이 검색된 문서에 근거했는지 확인하고, 인용(Citation)을 추가합니다.
+    6.  **답변 정제 (Answer Beautifier)**: 최종 답변을 사용자가 읽기 쉽도록 마크다운 형식으로 정리합니다.
 
-### Chat API 호출
+### 2. `chain_for_form.py`: 양식 기반 안전 안내문 생성 체인
 
-```python
-import requests
+사용자가 웹 양식을 통해 입력한 행사 정보를 바탕으로 맞춤형 안전 안내문을 생성하는 체인입니다.
 
-chat_url = "http://localhost:8000/api/chat"
-chat_payload = {
-    "question": "지진 발생 시 행동 요령 알려줘",
-    "session_id": "user123_session_abc"
-}
+-   **주요 역할**: 행사 정보의 잠재적 위험 요소를 분석하여, 방문객을 위한 상세하고 실용적인 안전 가이드를 자동으로 작성합니다.
+-   **작동 흐름**:
+    1.  **다각적 검색어 생성 (Query Generator)**: 행사명, 유형, 기간, 장소 등의 정보를 조합하여 발생 가능한 모든 위험 시나리오(예: "여름철 야외 행사 식중독 예방", "공연장 압사 사고 예방")에 대한 검색어를 생성합니다.
+    2.  **문서 검색 (Search Document)**: 생성된 검색어들을 사용하여 안전 관련 문서를 جامع적으로 검색합니다.
+    3.  **안내문 생성 (Generator)**: '안전 전문가' 역할을 수행하며, 검색된 문서와 사용자가 입력한 행사 정보를 종합하여 체계적인 구조의 맞춤형 안전 안내문을 생성합니다.
+    4.  **Grounding 확인 및 정제**: 생성된 안내문의 신뢰도를 확인하고 최종본을 마크다운 형식으로 다듬습니다.
 
-chat_response = requests.post(chat_url, json=chat_payload)
-chat_response.raise_for_status()  # 응답 코드가 200번대가 아니면 에러 발생
-chat_result = chat_response.json()
-print(chat_result)
-```
+### 3. `chain_for_form_chat.py`: 후속 질문 처리 체인
 
-### Generate Form API 호출
+`chain_for_form.py`에 의해 생성된 안전 안내문에 대해 사용자가 추가로 질문할 경우, 이를 처리하는 특화된 채팅 체인입니다.
 
-```python
-import requests
+-   **주요 역할**: 기존에 생성된 안내문과 대화의 맥락을 이해하고 후속 질문에 정확하게 답변합니다.
+-   **작동 흐름**:
+    1.  **질문 재작성 (Re-writer)**: 사용자의 후속 질문(예: "거기서 첫 번째 항목이 왜 중요한가요?")을 이전에 생성된 안내문과 대화 기록을 바탕으로 "화재 발생 시 신속한 대피가 왜 가장 중요한가요?"와 같이 명확한 질문으로 재작성합니다.
+    2.  **서브 쿼리 생성 (Query Generator)**: 재작성된 질문을 바탕으로, 답변에 필요한 배경 정보, 예방법, 관련 사례 등을 찾기 위한 추가 검색어들을 생성합니다.
+    3.  **문서 검색, 답변 생성, Grounding 및 정제**: `chain_for_chat`과 유사한 과정을 거쳐 사용자의 후속 질문에 대한 상세하고 정확한 답변을 생성합니다.
 
-form_url = "http://localhost:8000/api/generate_form"
-form_payload = {
-    "operation_period": "3월 13일 ~ 5월 16일",
-    "operation_time": "오전 10시 ~ 오후 6시",
-    "instruction_type" : "상세 안내문",
-    "user_additional_request" : "벚꽃 축제를 열거야"
-}
+## API 사용 가이드
 
+이 시스템은 FastAPI를 통해 3개의 주요 API 엔드포인트를 제공합니다. 각 API는 `http://<YOUR_SERVER_IP>:<PORT>` 주소로 요청할 수 있습니다.
 
-form_response = requests.post(form_url, json=form_payload)
-form_response.raise_for_status()
-form_result = form_response.json()
-print(form_result)
-```
+### 1. `/api/chat`
+
+일반적인 질의응답을 위한 API입니다.
+
+-   **Python 코드 예제**:
+    ```python
+    import requests
+
+    chat_url = "http://127.0.0.1:8000/api/chat"  # 실제 서버 주소로 변경 필요
+    chat_payload = {
+        "question": "지진 발생 시 행동 요령 알려줘",
+        "session_id": "user123_session_abc"
+    }
+
+    try:
+        response = requests.post(chat_url, json=chat_payload)
+        response.raise_for_status()  # 200번대 응답이 아니면 에러 발생
+        chat_result = response.json()
+        
+        print("--- 최종 답변 ---")
+        print(chat_result.get('final_answer'))
+        
+    except requests.exceptions.RequestException as e:
+        print(f"API 요청 실패: {e}")
+
+    ```
+
+### 2. `/api/generate_form`
+
+사용자가 입력한 양식(Form) 데이터를 기반으로 맞춤형 안전 안내문을 생성합니다.
+
+-   **Python 코드 예제**:
+    ```python
+    import requests
+
+    form_url = "http://127.0.0.1:8000/api/generate_form" # 실제 서버 주소로 변경 필요
+    form_payload = {
+        "place_name": "2025 한강 여름 뮤직 페스티벌",
+        "type": "대규모 야외 공연",
+        "region": "서울, 여의도 한강공원",
+        "period": "2025년 8월 8일 ~ 2025년 8월 10일",
+        "description": "뜨거운 여름밤을 식혀줄 대한민국 최고의 뮤직 페스티벌! 다양한 장르의 아티스트들과 함께하는 3일간의 축제. 푸드트럭 존과 체험 이벤트도 준비되어 있습니다.",
+        "category": "음악/페스티벌",
+        "related_documents": "전체 타임테이블, 행사장 안내도, 셔틀버스 운행 정보",
+        "emergency_contact_name": "종합상황실 안전관리팀",
+        "emergency_contact_phone": "02-123-4567"
+    }
+
+    try:
+        response = requests.post(form_url, json=form_payload)
+        response.raise_for_status()
+        form_result = response.json()
+
+        print("--- 생성된 안전 안내문 ---")
+        print(form_result.get('final_answer'))
+        
+        # 후속 질문을 위해 생성된 안내문을 변수에 저장
+        generated_form_content = form_result.get('final_answer')
+
+    except requests.exceptions.RequestException as e:
+        print(f"API 요청 실패: {e}")
+    ```
+
+### 3. `/api/form_chat`
+
+`generate_form`으로 생성된 안전 안내문에 대한 후속 질문을 처리합니다.
+
+-   **Python 코드 예제**:
+    ```python
+    import requests
+    # 'generate_form' API 호출 후 반환된 'final_answer' 값을 사용합니다.
+    # 예시에서는 위 코드 블록의 'generated_form_content' 변수를 사용한다고 가정합니다.
+    
+    # generated_form_content = "..." # 실제로는 이전 API 호출 결과
+
+    if 'generated_form_content' in locals():
+        form_chat_url = "http://127.0.0.1:8000/api/form_chat" # 실제 서버 주소로 변경 필요
+        form_chat_payload = {
+            "generated_form": generated_form_content,
+            "query": "온열질환 증상으로는 구체적으로 어떤 것들이 있나요?",
+            "session_id": "user123_session_abc"
+        }
+
+        try:
+            response = requests.post(form_chat_url, json=form_chat_payload)
+            response.raise_for_status()
+            form_chat_result = response.json()
+
+            print("--- 후속 질문에 대한 답변 ---")
+            print(form_chat_result.get('final_answer'))
+
+        except requests.exceptions.RequestException as e:
+            print(f"API 요청 실패: {e}")
+    else:
+        print("먼저 /api/generate_form 을 호출하여 'generated_form_content'를 생성해야 합니다.")
+
+    ```

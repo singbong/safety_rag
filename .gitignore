@@ -4,7 +4,10 @@
 !/.env.example
 
 # Data
-/vector/data/*
+/vector/data/original_pdf/*
+/vector/data/original_full_text/*
+/vector/data/chunked_docs/*
+/vector/data/vector_store/*
 /vector/definition/arcane-footing-464017-v9-a73a60318d02.json
 
 # Python
@@ -16,4 +19,5 @@ __pycache__/
 env/
 venv/
 .ipynb_checkpoints
-/test.ipynb
+/gemini.md
+/api_example.ipynb

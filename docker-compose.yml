@@ -13,7 +13,4 @@ services:
       - ./.env
     environment:
       - TZ=Asia/Seoul
-      - LANGSMITH_TRACING=true
-      - LANGSMITH_ENDPOINT="https://api.smith.langchain.com"
-      - LANGSMITH_PROJECT="fire_rag"
     restart: always

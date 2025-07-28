@@ -166,7 +166,7 @@ def create_cached_content(full_text: str, cache_ttl_hours: int = 1) -> str:
     
     # 캐시 생성
     content_cache = client.caches.create(
-        model="gemini-1.5-flash",
+        model="gemini-2.5-flash-lite",
         config=CreateCachedContentConfig(
             contents=contents,
             system_instruction=SYSTEM_PROMPT,
@@ -410,7 +410,7 @@ def contextual_content_with_caching(
     document_name: Optional[str] = None,
     text_file_path: Optional[str] = None,
     full_text: Optional[str] = None,
-    model: Optional[GenerativeModel] = "gemini-1.5-flash",
+    model: Optional[GenerativeModel] = "gemini-2.5-flash-lite",
     cache_ttl_hours: int = 1,
     show_progress: bool = True
 ) -> List[Dict[str, Any]]:
@@ -422,7 +422,7 @@ def contextual_content_with_caching(
         document_name: 문서명 (original_full_text에서 해당 텍스트 파일 검색)
         text_file_path: 직접 지정된 텍스트 파일 경로
         full_text: 직접 제공된 전체 텍스트
-        model: Gemini 모델 (기본값: gemini-1.5-flash)
+        model: Gemini 모델 (기본값: gemini-2.5-flash-lite)
         cache_ttl_hours: 캐시 TTL (시간)
         show_progress: 진행률 표시 여부
         
