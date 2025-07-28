@@ -92,17 +92,24 @@
     `vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
 
 4.  **문서 처리 및 벡터 DB 생성**
-    다음 명령어를 실행하여 데이터 처리 파이프라인을 구동합니다. `--rm` 옵션은 명령어 실행 후 컨테이너를 자동으로 삭제합니다.
+    아래 스크립트들을 **순서대로** 실행하여 데이터 처리 파이프라인을 구동합니다. 각 단계는 Docker 컨테이너 내에서 실행됩니다.
 
-    ```bash
-    docker-compose run --rm app python fire_app.py make_docs
-    ```
-
-    이 명령어는 내부적으로 다음의 전체 프로세스를 순차적으로 실행합니다.
-    -   **1. 텍스트 추출**: `pdfplumber`를 사용하여 `original_pdf/`에 있는 PDF 문서의 텍스트를 추출하여 `original_full_text/`에 저장합니다.
-    -   **2. 의미 기반 분할 (Chunking)**: 추출된 텍스트를 의미적, 토큰 기반 규칙에 따라 문서 조각(Chunk)으로 분할하여 `chunked_docs/`에 저장합니다.
-    -   **3. 컨텍스트 보강 (Context Enrichment)**: 각 문서 조각에 대해 원본 문서 전체를 참조하는 요약 컨텍스트를 생성하여 `contextual_content_docs/`에 저장함으로써 검색 정확도를 높입니다.
-    -   **4. 벡터화 및 저장**: 컨텍스트가 보강된 최종 텍스트를 임베딩 벡터로 변환하고, `FAISS` 벡터 스토어를 생성하여 `vector_store/`에 저장합니다.
+    -   **1. 텍스트 추출**: `pdfplumber`를 사용하여 PDF 문서의 텍스트를 추출합니다.
+        ```bash
+        docker-compose run --rm app python vector/definition/make_full_text.py
+        ```
+    -   **2. 의미 기반 분할 (Chunking)**: 추출된 텍스트를 문서 조각(Chunk)으로 분할합니다.
+        ```bash
+        docker-compose run --rm app python vector/definition/make_docs.py
+        ```
+    -   **3. 컨텍스트 보강 (Context Enrichment)**: 각 문서 조각에 요약 컨텍스트를 추가하여 검색 정확도를 높입니다.
+        ```bash
+        docker-compose run --rm app python vector/definition/make_contextual_content_with_caching.py
+        ```
+    -   **4. 벡터화 및 저장**: 최종 텍스트를 임베딩 벡터로 변환하고 `FAISS` 벡터 스토어를 생성합니다.
+        ```bash
+        docker-compose run --rm app python vector/definition/vector_store.py
+        ```
 
 5.  **애플리케이션 실행**
 
@@ -113,10 +120,12 @@
         ```
         API는 `http://127.0.0.1:8000`에서 접근할 수 있습니다.
 
-    -   **CLI 채팅 실행**:
-        문서 처리가 완료되면 다음 명령어를 통해 대화형 질의응답을 시작할 수 있습니다.
+    -   **CLI 채팅 실행 (로컬)**:
+        *참고: 현재 CLI 채팅 기능은 Docker 환경에서 직접 실행하는 것을 지원하지 않습니다. 로컬 Python 환경에서 실행해야 합니다.*
         ```bash
-        docker-compose run --rm app python fire_app.py chat
+        # 가상환경 활성화
+        # source venv/bin/activate
+        python fire_app.py chat
         ```
 
 ## 기술 상세 설명
