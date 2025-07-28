@@ -104,7 +104,7 @@
         ```
     -   **3. 컨텍스트 보강 (Context Enrichment)**: 각 문서 조각에 요약 컨텍스트를 추가하여 검색 정확도를 높입니다.
         ```bash
-        docker-compose run --rm app python vector/definition/make_contextual_content_with_caching.py
+        docker-compose run --rm app python vector/definition/make_context.py
         ```
     -   **4. 벡터화 및 저장**: 최종 텍스트를 임베딩 벡터로 변환하고 `FAISS` 벡터 스토어를 생성합니다.
         ```bash
