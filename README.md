@@ -108,7 +108,7 @@
         ```
     -   **4. 벡터화 및 저장**: 최종 텍스트를 임베딩 벡터로 변환하고 `FAISS` 벡터 스토어를 생성합니다.
         ```bash
-        docker-compose run --rm app python vector/definition/vector_store.py
+        docker-compose run --rm app python run_vector_store.py
         ```
 
 5.  **애플리케이션 실행**
