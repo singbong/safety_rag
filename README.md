@@ -106,9 +106,9 @@
         ```bash
         docker-compose run --rm app python vector/definition/make_context.py
         ```
-    -   **4. 벡터화 및 저장**: 최종 텍스트를 임베딩 벡터로 변환하고 `FAISS` 벡터 스토어를 생성합니다.
+    -   **4. 벡터화 및 저장**: 최종 텍스트를 임베딩 벡터로 변환하고 `FAISS` 벡터 스토어를 생성합니다. 이 단계는 `vector_store.py`의 `create_vector_store` 함수를 직접 호출해야 합니다.
         ```bash
-        docker-compose run --rm app python run_vector_store.py
+        docker-compose run --rm app python -c "from vector.definition.vector_store import store_vector_db; db = store_vector_db(); db.create_vector_store(save_path='../data/vector_store/faiss_vector_db')"
         ```
 
 5.  **애플리케이션 실행**
