@@ -2,6 +2,9 @@
 
 이 프로젝트는 PDF 문서 내용을 기반으로 사용자의 질문에 답변하는 RAG(Retrieval-Augmented Generation, 검색 증강 생성) 시스템입니다. Google Gemini 모델과 LangChain 프레임워크를 활용하여 구현되었습니다.
 
+
+**※ [RAG] 구축에 필요한 데이터는 https://huggingface.co/datasets/bong9513/safety_rag_data 에서 다운로드 받을 수 있습니다.**
+
 ## 주요 기능
 
 - **문서 처리**: PDF 파일을 텍스트로 변환하고 의미 기반으로 분할(Semantic Chunking)합니다.
