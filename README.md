@@ -139,8 +139,11 @@
 -   **의미 기반 분할 (Semantic Chunking)**:
     -   `Langchain`의 `SemanticChunker`와 Google의 `gemini-embedding-001` 모델을 사용하여 문서를 의미적 경계에 따라 1차적으로 분할합니다.
     -   분할된 청크가 Gemini 모델의 토큰 제한(2048 토큰)을 초과할 경우, `RecursiveCharacterTextSplitter`와 유사한 방식으로 추가 분할하여 모든 청크가 토큰 제한을 준수하도록 합니다.
--   **컨텍스트 보강 (Contextual Enrichment)**:
-    -   각 청크의 검색 정확도를 높이기 위해, `gemini-2.5-flash-lite` 모델을 사용하여 전체 문서의 내용을 참조하여 각 청크에 대한 한 문장 요약 컨텍스트를 생성합니다.
+-   **컨텍스트 보강 (Contextual Enrichment) - Powered by Anthropic's Technique**:
+    -   본 시스템은 검색 정확도를 극대화하기 위해 **Anthropic의 "Contextual Retrieval" 논문에서 제시된 아이디어에 착안**하여 각 문서 조각(Chunk)에 풍부한 컨텍스트를 부여합니다.
+    -   `gemini-2.5-flash-lite` 모델이 전체 문서의 맥락을 파악하여, 각 조각의 핵심 내용을 요약하는 **헤더(Header)를 생성**합니다.
+    -   생성된 헤더는 원본 문서 조각의 내용과 결합되어 (예: `헤더: [요약 내용]\n\n내용: [원본 문서 조각]`) 하나의 완성된 텍스트로 만들어집니다.
+    -   **바로 이 결합된 텍스트가 임베딩**되어 벡터 스토어에 저장됩니다. 이를 통해 단순 키워드 매칭을 넘어선 깊이 있는 의미 기반 검색이 가능해지며, 사용자의 질문 의도에 가장 부합하는 정보를 정확하게 찾아낼 수 있습니다.
     -   이 과정에서 Google GenAI의 Caching API를 활용하여 전체 문서 텍스트를 캐시에 저장함으로써, 반복적인 API 호출 비용과 시간을 절약합니다.
 -   **벡터화**:
     -   컨텍스트가 보강된 텍스트(`"컨텍스트 요약 : 원본 청크 내용"`)를 `gemini-embedding-001` 모델을 통해 임베딩 벡터로 변환합니다.
