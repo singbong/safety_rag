@@ -4,6 +4,7 @@ uvicorn==0.29.0
 
 google-genai
 google-cloud-aiplatform
+google-cloud-documentai
 
 # LangChain & friends – recent split packages
 langchain==0.3.26

@@ -25,5 +25,5 @@ COPY . .
 # 9. 포트 노출
 EXPOSE 8000
 
-# 10. 애플리케이션 실행 (가상환경의 uvicorn 사용)
-CMD ["uvicorn", "fire_app:app", "--host", "0.0.0.0", "--port", "8000"]
+# 10. 애플리케이션 실행 (가상환경의 uvicorn 사용, 디버그 모드 활성화)
+CMD ["uvicorn", "fire_app:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--log-level", "debug"]

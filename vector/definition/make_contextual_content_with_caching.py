@@ -306,9 +306,7 @@ def contextual_content_with_caching_batch(
     # 캐시된 콘텐츠로 모델 초기화
     if model is None:
         vertexai.init(
-            project=project_id, 
-            location="asia-northeast1",
-            credentials=credentials
+            location="asia-northeast1"
         )
         model = GenerativeModel.from_cached_content(cache_name)
         logger.info(f"캐싱된 콘텐츠를 사용한 모델 초기화 완료: {cache_name}")

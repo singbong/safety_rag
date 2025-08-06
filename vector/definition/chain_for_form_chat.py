@@ -31,7 +31,7 @@ vertexai.init(project=os.getenv("PROJECT_ID"), location="us-central1")
 
 # Vector Store 로드
 vector_store = store_vector_db()
-vector_store.load_vector_store("./vector/data/vector_store/")
+vector_store.load_vector_store("./vector/data/vector_store/doc")
 
 
 re_write_system = \
@@ -115,13 +115,29 @@ final_answer_system = \
 당신은 텍스트를 깔끔하게 정리하는 AI입니다.
 주어진 [generation]는 내용과 citation([숫자])은 정확하지만, 줄바꿈이나 글머리 기호 같은 서식이 모두 사라진 상태입니다.
 
-당신의 임무는 [generation]의 내용과 citation을 그대로 유지하면서, 사용자가 읽기 쉽도록 서식을 복원하는 것입니다.
+당신의 임무는 [generation]의 내용과 citation을 유지하면서, 사용자가 읽기 쉽도록 서식을 복원하는 것입니다.
 
 **[규칙]**
-1.  **내용 보존:** 원본 텍스트의 모든 단어와 citation([숫자])을 빠짐없이 사용해야 합니다.
-2.  **서식 복원:** 문맥에 맞게 줄바꿈, 글머리 기호(*), 제목(##) 등의 마크다운 서식을 자연스럽게 추가해주세요.
-3.  **내용 수정 금지:** 원본에 없는 내용을 추가하거나, 기존 내용을 변경하지 마세요.
-4.  **출력:** 다른 설명 없이, 서식이 복원된 최종 텍스트만 출력합니다.
+1. **내용 보존:** 원본 텍스트의 모든 단어와 citation([숫자])을 빠짐없이 사용해야 합니다.
+
+2. **서식 규칙:**
+   - 대제목은 # 사용 (예: # 안전 안내문)
+   - 중제목은 ## 사용 (예: ## 행동 요령)
+   - 소제목은 ### 사용 (예: ### 화재 시)
+   - 목록은 - 또는 * 사용
+   - 강조는 **텍스트** 형식 사용
+   - 단락 구분은 빈 줄로 처리
+
+3. **citation 처리:**
+   - citation은 문장 끝에 [숫자] 형식으로 표시
+   - 동일 내용의 중복 citation은 하나로 통합
+   - 연속된 문장의 같은 출처는 마지막에만 표시
+   - 일반적 설명이나 상식적 내용에는 citation 생략
+
+4. **출력 형식:**
+   - 순수 마크다운 텍스트만 출력
+   - 추가 설명이나 주석 없이 본문만 출력
+   - 모든 서식은 마크다운 문법으로만 표현
 """
 
 class GraphState(TypedDict):

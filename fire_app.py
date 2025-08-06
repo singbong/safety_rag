@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from vector.definition.chain_for_chat import chat_chain
 from vector.definition.chain_for_form_chat import form_chat_chain
 from vector.definition.chain_for_form import form_chain
+from vector.definition.custom import custom_form_chain
 from typing import Optional
 from pydantic import BaseModel
 from langchain.memory import ConversationSummaryMemory
@@ -50,7 +51,7 @@ def get_session_memory(session_id: str) -> ConversationSummaryMemory:
 chat_flow = chat_chain().link_nodes()
 form_chat_flow = form_chat_chain().link_nodes()
 make_form_flow = form_chain().link_nodes()
-
+make_custom_form_flow = custom_form_chain().link_nodes()
 
 def chat_rag(question: str, session_id: str) -> str:
     config = RunnableConfig(
@@ -103,7 +104,27 @@ def make_form_chat(generated_form: Optional[str] = None, query: str = None, sess
     memory.save_context({"query": final_state["query"]}, {"answer": final_state.get("generation", "에러: 답변을 생성할 수 없습니다!")})
     return final_state
 
-
+def make_custom_form(place_name: str, type: str, location: str, period: str, description: Optional[str] = None, category: Optional[str] = None, emergency_contact_name: Optional[str] = None, emergency_contact_phone: Optional[str] = None, expected_attendees: Optional[str] = None, related_documents: Optional[str] = None) -> str:
+    config = RunnableConfig(
+                recursion_limit=12,
+                timeout=180,  # 3분 타임아웃
+                max_retries=2,  # 최대 2회 재시도
+                configurable={"thread_id": random_uuid()}
+            )
+    inputs = {
+        "place_name": place_name,
+        "type": type,
+        "location": location,
+        "period": period,
+        "description": description,
+        "category": category,
+        "emergency_contact_name": emergency_contact_name,
+        "emergency_contact_phone": emergency_contact_phone,
+        "expected_attendees": expected_attendees,
+        "related_documents": related_documents
+    }
+    final_state = make_custom_form_flow.invoke(inputs, config)
+    return final_state
 
 # FastAPI 애플리케이션 설정
 app = FastAPI()
@@ -139,7 +160,21 @@ class FormRequest(BaseModel):
     emergency_contact_name: Optional[str] = None
     emergency_contact_phone: Optional[str] = None
 
+class custom_form_request(BaseModel):
+    place_name: str
+    type: str
+    location: str
+    period: str
+    description: Optional[str] = None
+    category: Optional[str] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    expected_attendees: Optional[str] = None
+    related_documents: Optional[str] = None
 
+
+
+from vector.definition.ocr import ocr
 
 @app.post("/api/chat")
 async def chat_endpoint(request: ApiRequest):
@@ -172,7 +207,7 @@ async def generate_form_endpoint(request: FormRequest):
             period=request.period,
             description=request.description,
             category=request.category,
-            related_documents=request.related_documents,
+            related_documents=ocr(request.related_documents),
             emergency_contact_name=request.emergency_contact_name,
             emergency_contact_phone=request.emergency_contact_phone
         )
@@ -190,6 +225,27 @@ async def form_chat_endpoint(request: FormChatRequest):
         if not request.session_id:
             raise HTTPException(status_code=400, detail="session_id is required for form chat.")
         final_state = make_form_chat(request.generated_form, request.query, request.session_id)
+        return final_state
+    except Exception as e:
+        import traceback
+        print(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")
+
+@app.post("/api/custom_form")
+async def custom_form_endpoint(request: custom_form_request):
+    try:      
+        final_state = make_custom_form(
+            place_name=request.place_name, 
+            type=request.type, 
+            location=request.location, 
+            period=request.period, 
+            description=request.description, 
+            category=request.category, 
+            emergency_contact_name=request.emergency_contact_name, 
+            emergency_contact_phone=request.emergency_contact_phone, 
+            expected_attendees=request.expected_attendees,
+            related_documents=ocr(request.related_documents)
+            )
         return final_state
     except Exception as e:
         import traceback

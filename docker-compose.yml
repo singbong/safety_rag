@@ -10,7 +10,7 @@ services:
       - ./vector:/app/vector
       - ./fire_app.py:/app/fire_app.py
     env_file:
-      - ./.env
+      - .env
     environment:
       - TZ=Asia/Seoul
     restart: always

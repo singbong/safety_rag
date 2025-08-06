@@ -3,7 +3,7 @@ from typing_extensions import TypedDict, Annotated
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_vertexai import ChatVertexAI
 from langchain_core.runnables import RunnableLambda
-from langchain_core.output_parsers import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser, JsonOutputParser
 from langchain_google_community.vertex_check_grounding import VertexAICheckGroundingWrapper
 from langgraph.graph import END, StateGraph, START
 from google.oauth2 import service_account
@@ -31,7 +31,7 @@ vertexai.init(project=os.getenv("PROJECT_ID"), location="us-central1")
 
 # Vector Store 로드
 vector_store = store_vector_db()
-vector_store.load_vector_store("./vector/data/vector_store/")
+vector_store.load_vector_store("./vector/data/vector_store/doc")
 
 
 re_write_system = """
