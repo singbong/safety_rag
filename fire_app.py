@@ -244,7 +244,7 @@ async def custom_form_endpoint(request: custom_form_request):
             emergency_contact_name=request.emergency_contact_name, 
             emergency_contact_phone=request.emergency_contact_phone, 
             expected_attendees=request.expected_attendees,
-            related_documents=ocr(request.related_documents)
+            related_documents=ocr(request.related_documents) if request.related_documents else None
             )
         return final_state
     except Exception as e:

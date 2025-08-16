@@ -246,7 +246,6 @@ class store_vector_db:
             # Vertex AI Rank로 리랭킹 (올바른 매개변수 순서: documents, query)
             reranked_docs = self.reranker.compress_documents(docs_for_rerank, query)
             result = []
-            print(reranked_docs)
             for doc in reranked_docs[:k]:
                 result.append(docs_for_rerank[int(doc.metadata['id'])])
 
