@@ -22,6 +22,7 @@
 -   **AI**:
     -   `google-generativeai` & `google-cloud-aiplatform`: Google Gemini 모델 API 활용
     -   `langchain-google-vertexai`: LangChain과 Vertex AI 통합
+    -   `google-cloud-vision`: Google Cloud Vision API (OCR 처리)
     -   `FAISS`: 벡터 데이터베이스 (유사도 검색)
     -   `transformers` & `sentence-transformers`: 자연어 처리 및 임베딩
 -   **데이터 처리**:
@@ -63,6 +64,7 @@
         ├── make_full_text.py      # PDF에서 전체 텍스트를 추출하는 스크립트
         ├── semantic_split_genai.py # GenAI 모델을 사용한 의미 기반 분할 유틸리티
         ├── semantic_split_vertex.py# Vertex AI 모델을 사용한 의미 기반 분할 유틸리티
+        ├── custom.py              # 날씨 기반 안전 분석 및 맞춤형 안전 안내문 생성 체인
         └── vector_store.py        # FAISS 벡터 DB 생성, 저장, 로드 및 검색/재순위 로직 관리
 ```
 
@@ -93,6 +95,8 @@
 
 3.  **데이터 준비**
     `vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
+    
+    **참고**: 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 API로 업로드하면, 시스템이 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출합니다. 이를 통해 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성할 수 있습니다.
 
 4.  **문서 처리 및 벡터 DB 생성**
     아래 스크립트들을 **순서대로** 실행하여 데이터 처리 파이프라인을 구동합니다. 각 단계는 Docker 컨테이너 내에서 실행됩니다.
@@ -136,6 +140,7 @@
 ### 문서 처리 및 벡터화
 
 -   **텍스트 추출**: `pdfplumber`를 사용하여 원본 PDF에서 텍스트와 페이지 번호 등 메타데이터를 추출합니다.
+-   **OCR 처리**: 사용자가 API로 업로드한 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출하고, 이를 AI 분석에 활용합니다.
 -   **의미 기반 분할 (Semantic Chunking)**:
     -   `Langchain`의 `SemanticChunker`와 Google의 `gemini-embedding-001` 모델을 사용하여 문서를 의미적 경계에 따라 1차적으로 분할합니다.
     -   분할된 청크가 Gemini 모델의 토큰 제한(2048 토큰)을 초과할 경우, `RecursiveCharacterTextSplitter`와 유사한 방식으로 추가 분할하여 모든 청크가 토큰 제한을 준수하도록 합니다.
@@ -184,7 +189,7 @@
 
 -   **주요 역할**: 행사 정보의 잠재적 위험 요소를 분석하여, 방문객을 위한 상세하고 실용적인 안전 가이드를 자동으로 작성합니다.
 -   **작동 흐름**:
-    1.  **다각적 검색어 생성 (Query Generator)**: 행사명, 유형, 기간, 장소 등의 정보를 조합하여 발생 가능한 모든 위험 시나리오(예: "여름철 야외 행사 식중독 예방", "공연장 압사 사고 예방")에 대한 검색어를 생성합니다.
+    1.  **다각적 검색어 생성 (Query Generator)**: 행사명, 유형, 기간, 장소, OCR 처리된 관련 문서 내용 등을 조합하여 발생 가능한 모든 위험 시나리오(예: "여름철 야외 행사 식중독 예방", "공연장 압사 사고 예방")에 대한 검색어를 생성합니다.
     2.  **문서 검색 (Search Document)**: 생성된 검색어들을 사용하여 안전 관련 문서를 جامع적으로 검색합니다.
     3.  **안내문 생성 (Generator)**: '안전 전문가' 역할을 수행하며, 검색된 문서와 사용자가 입력한 행사 정보를 종합하여 체계적인 구조의 맞춤형 안전 안내문을 생성합니다.
     4.  **Grounding 확인 및 정제**: 생성된 안내문의 신뢰도를 확인하고 최종본을 마크다운 형식으로 다듬습니다.
@@ -199,9 +204,53 @@
     2.  **서브 쿼리 생성 (Query Generator)**: 재작성된 질문을 바탕으로, 답변에 필요한 배경 정보, 예방법, 관련 사례 등을 찾기 위한 추가 검색어들을 생성합니다.
     3.  **문서 검색, 답변 생성, Grounding 및 정제**: `chain_for_chat`과 유사한 과정을 거쳐 사용자의 후속 질문에 대한 상세하고 정확한 답변을 생성합니다.
 
+### 4. `custom.py`: 날씨 기반 안전 분석 및 맞춤형 안전 안내문 생성 체인
+
+`custom.py`는 이 시스템의 핵심 기능 중 하나로, Google Geocoding API와 Open-Meteo 날씨 API를 활용하여 행사 장소의 실시간 날씨 정보를 분석하고, 이를 기반으로 날씨 관련 안전 위험 요소를 예측하는 고급 기능을 제공합니다.
+
+#### **주요 특징**
+- **LangGraph 기반 복합 체인**: 여러 단계의 노드들이 순차적으로 연결되어 복잡한 안전 분석을 수행합니다.
+- **실시간 날씨 데이터 통합**: 행사 장소의 24시간 날씨 예보를 실시간으로 수집하여 분석에 활용합니다.
+- **다중 벡터 스토어 활용**: 안전 문서, 날씨 관련 사고 사례, 행사 관련 사고 사례를 각각 별도의 벡터 스토어에서 검색합니다.
+- **Vertex AI Grounding**: 생성된 안전 안내문의 신뢰도를 Vertex AI의 Grounding 기능으로 검증합니다.
+
+#### **작동 흐름**
+    1. **행사 정보 기반 검색어 생성**:
+       - `festival_query_generator`: 행사 유형, 장소, 규모, OCR 처리된 관련 문서 내용 등을 분석하여 행사 관련 사고 사례 검색어 생성
+       - `weather_query_generator`: 행사 장소의 실시간 날씨 정보를 분석하여 날씨 관련 위험 요소 검색어 생성
+       - `safety_query_generator`: 행사 정보와 OCR 처리된 문서 내용을 종합하여 일반적인 안전 위험 요소 검색어 생성
+
+2. **다중 벡터 스토어 검색**:
+   - `search_festival_document`: 행사 관련 사고 사례 벡터 스토어에서 유사 사례 검색
+   - `search_weather_document`: 날씨 관련 사고 사례 벡터 스토어에서 유사 기상 조건의 사고 사례 검색
+   - `search_safety_document`: 일반 안전 문서 벡터 스토어에서 관련 안전 정보 검색
+
+3. **맞춤형 안전 안내문 생성**:
+   - `generator`: 검색된 모든 정보를 종합하여 행사 특성과 현재 날씨에 최적화된 안전 안내문 생성
+   - `hallu_checker`: Vertex AI Grounding을 통해 생성된 안내문의 신뢰도 검증 및 인용 추가
+
+#### **날씨 데이터 처리 파이프라인**
+- **지리 좌표 변환**: Google Geocoding API를 사용하여 행사 장소명을 위도/경도 좌표로 변환
+- **24시간 날씨 예보 수집**: Open-Meteo API를 통해 상세한 날씨 정보 수집 (기온, 강수량, 풍속, 습도, UV 지수 등)
+- **LLM 기반 날씨 분석**: Gemini 2.5 Flash Lite 모델이 날씨 데이터를 전문적으로 분석하여 위험 요소 추출
+- **날씨 기반 검색어 생성**: 분석된 날씨 정보를 바탕으로 유사한 기상 조건의 사고 사례를 찾기 위한 검색어 자동 생성
+
+#### **환경 변수 설정**
+```env
+GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
+```
+
+#### **활용 시나리오**
+- **여름철 야외 행사**: 폭염, 국지성 호우, 높은 UV 지수 등에 대한 사전 경고 및 대비 방안 제공
+- **겨울철 실외 행사**: 한파, 강설, 빙판길 등에 대한 안전 수칙 안내
+- **봄/가을 행사**: 일교차, 강풍, 미세먼지 등 계절별 특수 기상 조건에 대한 주의사항 제공
+- **실시간 기상 변화 대응**: 행사 당일 급변하는 날씨에 대한 즉각적인 안전 정보 업데이트
+
+이 기능을 통해 행사 주최자는 단순한 행사 정보만으로도 날씨에 특화된 맞춤형 안전 안내문을 자동으로 생성할 수 있으며, 방문객들은 현재 기상 조건에 최적화된 안전 수칙을 받아볼 수 있습니다.
+
 ## API 사용 가이드
 
-이 시스템은 FastAPI를 통해 3개의 주요 API 엔드포인트를 제공합니다. 각 API는 `http://<YOUR_SERVER_IP>:<PORT>` 주소로 요청할 수 있습니다.
+이 시스템은 FastAPI를 통해 4개의 주요 API 엔드포인트를 제공합니다. 각 API는 `http://<YOUR_SERVER_IP>:<PORT>` 주소로 요청할 수 있습니다.
 
 ### 1. `/api/chat`
 
@@ -234,6 +283,8 @@
 
 사용자가 입력한 양식(Form) 데이터를 기반으로 맞춤형 안전 안내문을 생성합니다.
 
+**참고**: `related_documents` 필드에는 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 업로드하면, 시스템이 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출합니다. 이 정보는 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성하는 데 활용됩니다.
+
 -   **Python 코드 예제**:
     ```python
     import requests
@@ -246,7 +297,7 @@
         "period": "2025년 8월 8일 ~ 2025년 8월 10일",
         "description": "뜨거운 여름밤을 식혀줄 대한민국 최고의 뮤직 페스티벌! 다양한 장르의 아티스트들과 함께하는 3일간의 축제. 푸드트럭 존과 체험 이벤트도 준비되어 있습니다.",
         "category": "음악/페스티벌",
-        "related_documents": "전체 타임테이블, 행사장 안내도, 셔틀버스 운행 정보",
+        "related_documents": "festival_guide.pdf",  # PDF 파일 업로드
         "emergency_contact_name": "종합상황실 안전관리팀",
         "emergency_contact_phone": "02-123-4567"
     }
@@ -299,4 +350,70 @@
     else:
         print("먼저 /api/generate_form 을 호출하여 'generated_form_content'를 생성해야 합니다.")
 
+    ```
+
+### 4. `/api/custom`
+
+`custom.py`에 구현된 날씨 기반 안전 분석 기능을 활용하여 행사 정보와 실시간 날씨 데이터를 종합한 맞춤형 안전 안내문을 생성합니다. 이 API는 Google Geocoding API와 Open-Meteo 날씨 API를 자동으로 호출하여 행사 장소의 24시간 날씨 예보를 분석하고, 이를 기반으로 날씨 관련 위험 요소를 예측합니다.
+
+**참고**: `related_documents` 필드에는 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 업로드하면, 시스템이 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출합니다. 이 정보는 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성하는 데 활용됩니다.
+
+-   **Python 코드 예제**:
+    ```python
+    import requests
+
+    custom_url = "http://127.0.0.1:8000/api/custom"  # 실제 서버 주소로 변경 필요
+    custom_payload = {
+        "place_name": "2025 한강 여름 뮤직 페스티벌",
+        "type": "대규모 야외 공연",
+        "location": "서울, 여의도 한강공원",
+        "period": "2025년 8월 8일 ~ 2025년 8월 10일",
+        "description": "뜨거운 여름밤을 식혀줄 대한민국 최고의 뮤직 페스티벌! 다양한 장르의 아티스트들과 함께하는 3일간의 축제. 푸드트럭 존과 체험 이벤트도 준비되어 있습니다.",
+        "category": "음악/페스티벌",
+        "related_documents": "festival_guide.pdf",  # PDF 파일 업로드
+        "emergency_contact_name": "종합상황실 안전관리팀",
+        "emergency_contact_phone": "02-123-4567",
+        "expected_attendees": "50000"
+    }
+
+    try:
+        response = requests.post(custom_url, json=custom_payload)
+        response.raise_for_status()
+        custom_result = response.json()
+
+        print("--- 날씨 기반 맞춤형 안전 안내문 ---")
+        print(custom_result.get('generation'))
+        
+        # Grounding 검증 결과도 확인 가능
+        if 'hallu_check' in custom_result:
+            print("\n--- Grounding 검증 결과 ---")
+            print(f"신뢰도: {custom_result['hallu_check'].get('answer_with_citations', 'N/A')}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"API 요청 실패: {e}")
+    ```
+
+-   **주요 특징**:
+    - **실시간 날씨 분석**: 행사 장소의 24시간 날씨 예보를 자동으로 수집하고 분석
+    - **다중 벡터 스토어 검색**: 안전 문서, 날씨 관련 사고 사례, 행사 관련 사고 사례를 각각 별도 검색
+    - **Vertex AI Grounding**: 생성된 안내문의 신뢰도를 자동으로 검증
+    - **맞춤형 위험 요소 예측**: 행사 특성과 현재 날씨를 종합하여 구체적인 위험 요소 분석
+
+-   **필수 환경 변수**:
+    ```env
+    GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
+    ```
+
+-   **응답 형식**:
+    ```json
+    {
+        "generation": "생성된 날씨 기반 맞춤형 안전 안내문",
+        "hallu_check": {
+            "answer_with_citations": "Grounding 검증이 완료된 안내문 (인용 포함)"
+        },
+        "weather_summary": "분석된 날씨 요약 정보",
+        "festival_query_list": ["생성된 행사 관련 검색어 목록"],
+        "weather_query_list": ["생성된 날씨 관련 검색어 목록"],
+        "safety_query_list": ["생성된 안전 관련 검색어 목록"]
+    }
     ```
