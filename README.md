@@ -214,6 +214,8 @@
 - **다중 벡터 스토어 활용**: 안전 문서, 날씨 관련 사고 사례, 행사 관련 사고 사례를 각각 별도의 벡터 스토어에서 검색합니다.
 - **Vertex AI Grounding**: 생성된 안전 안내문의 신뢰도를 Vertex AI의 Grounding 기능으로 검증합니다.
 
+<img width="2965" height="4005" alt="KakaoTalk_20250807_215414775_01" src="https://github.com/user-attachments/assets/830fdf44-2ced-40fc-a978-af480921e4da" />
+
 #### **작동 흐름**
     1. **행사 정보 기반 검색어 생성**:
        - `festival_query_generator`: 행사 유형, 장소, 규모, OCR 처리된 관련 문서 내용 등을 분석하여 행사 관련 사고 사례 검색어 생성
