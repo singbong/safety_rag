@@ -22,6 +22,7 @@
 -   **AI**:
     -   `google-generativeai` & `google-cloud-aiplatform`: Google Gemini 모델 API 활용
     -   `langchain-google-vertexai`: LangChain과 Vertex AI 통합
+    -   `google-cloud-vision`: Google Cloud Vision API (OCR 처리)
     -   `FAISS`: 벡터 데이터베이스 (유사도 검색)
     -   `transformers` & `sentence-transformers`: 자연어 처리 및 임베딩
 -   **데이터 처리**:
@@ -95,7 +96,7 @@
 3.  **데이터 준비**
     `vector/data/original_pdf/` 디렉터리에 분석할 PDF 파일들을 추가합니다.
     
-    **참고**: 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)은 OCR 처리하여 텍스트를 추출한 후, API 호출 시 `related_documents` 필드에 포함시켜야 합니다. 이를 통해 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성할 수 있습니다.
+    **참고**: 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 API로 업로드하면, 시스템이 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출합니다. 이를 통해 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성할 수 있습니다.
 
 4.  **문서 처리 및 벡터 DB 생성**
     아래 스크립트들을 **순서대로** 실행하여 데이터 처리 파이프라인을 구동합니다. 각 단계는 Docker 컨테이너 내에서 실행됩니다.
@@ -139,7 +140,7 @@
 ### 문서 처리 및 벡터화
 
 -   **텍스트 추출**: `pdfplumber`를 사용하여 원본 PDF에서 텍스트와 페이지 번호 등 메타데이터를 추출합니다.
--   **OCR 처리**: 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 OCR 처리하여 텍스트를 추출하고, 이를 `related_documents` 필드에 포함시켜 AI가 행사의 구체적인 세부사항을 파악할 수 있도록 합니다.
+-   **OCR 처리**: 사용자가 API로 업로드한 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출하고, 이를 AI 분석에 활용합니다.
 -   **의미 기반 분할 (Semantic Chunking)**:
     -   `Langchain`의 `SemanticChunker`와 Google의 `gemini-embedding-001` 모델을 사용하여 문서를 의미적 경계에 따라 1차적으로 분할합니다.
     -   분할된 청크가 Gemini 모델의 토큰 제한(2048 토큰)을 초과할 경우, `RecursiveCharacterTextSplitter`와 유사한 방식으로 추가 분할하여 모든 청크가 토큰 제한을 준수하도록 합니다.
@@ -282,7 +283,7 @@ GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
 
 사용자가 입력한 양식(Form) 데이터를 기반으로 맞춤형 안전 안내문을 생성합니다.
 
-**참고**: `related_documents` 필드는 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 OCR 처리하여 추출한 텍스트 내용을 포함해야 합니다. 이 정보는 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성하는 데 활용됩니다.
+**참고**: `related_documents` 필드에는 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 업로드하면, 시스템이 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출합니다. 이 정보는 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성하는 데 활용됩니다.
 
 -   **Python 코드 예제**:
     ```python
@@ -296,7 +297,7 @@ GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
         "period": "2025년 8월 8일 ~ 2025년 8월 10일",
         "description": "뜨거운 여름밤을 식혀줄 대한민국 최고의 뮤직 페스티벌! 다양한 장르의 아티스트들과 함께하는 3일간의 축제. 푸드트럭 존과 체험 이벤트도 준비되어 있습니다.",
         "category": "음악/페스티벌",
-        "related_documents": "행사장 안내도.pdf에서 추출한 내용: 행사장은 한강공원 내 3개 구역으로 나뉘며, 메인 스테이지는 2만명 수용 가능합니다. 셔틀버스는 여의도역에서 10분 간격으로 운행됩니다. 타임테이블에 따르면 오후 2시부터 밤 11시까지 공연이 진행됩니다.",
+        "related_documents": "festival_guide.pdf",  # PDF 파일 업로드
         "emergency_contact_name": "종합상황실 안전관리팀",
         "emergency_contact_phone": "02-123-4567"
     }
@@ -355,7 +356,7 @@ GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
 
 `custom.py`에 구현된 날씨 기반 안전 분석 기능을 활용하여 행사 정보와 실시간 날씨 데이터를 종합한 맞춤형 안전 안내문을 생성합니다. 이 API는 Google Geocoding API와 Open-Meteo 날씨 API를 자동으로 호출하여 행사 장소의 24시간 날씨 예보를 분석하고, 이를 기반으로 날씨 관련 위험 요소를 예측합니다.
 
-**참고**: `related_documents` 필드는 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 OCR 처리하여 추출한 텍스트 내용을 포함해야 합니다. 이 정보는 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성하는 데 활용됩니다.
+**참고**: `related_documents` 필드에는 행사 관련 PDF 파일(행사장 안내도, 타임테이블, 셔틀버스 운행 정보 등)을 업로드하면, 시스템이 Google Cloud Vision API를 사용하여 자동으로 OCR 처리하여 텍스트를 추출합니다. 이 정보는 AI가 행사의 구체적인 세부사항을 파악하여 더 정확한 안전 안내문을 생성하는 데 활용됩니다.
 
 -   **Python 코드 예제**:
     ```python
@@ -369,7 +370,7 @@ GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
         "period": "2025년 8월 8일 ~ 2025년 8월 10일",
         "description": "뜨거운 여름밤을 식혀줄 대한민국 최고의 뮤직 페스티벌! 다양한 장르의 아티스트들과 함께하는 3일간의 축제. 푸드트럭 존과 체험 이벤트도 준비되어 있습니다.",
         "category": "음악/페스티벌",
-        "related_documents": "행사장 안내도.pdf에서 추출한 내용: 행사장은 한강공원 내 3개 구역으로 나뉘며, 메인 스테이지는 2만명 수용 가능합니다. 셔틀버스는 여의도역에서 10분 간격으로 운행됩니다. 타임테이블에 따르면 오후 2시부터 밤 11시까지 공연이 진행됩니다.",
+        "related_documents": "festival_guide.pdf",  # PDF 파일 업로드
         "emergency_contact_name": "종합상황실 안전관리팀",
         "emergency_contact_phone": "02-123-4567",
         "expected_attendees": "50000"
