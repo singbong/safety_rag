@@ -246,7 +246,7 @@ GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
 
 ## API 사용 가이드
 
-이 시스템은 FastAPI를 통해 3개의 주요 API 엔드포인트를 제공합니다. 각 API는 `http://<YOUR_SERVER_IP>:<PORT>` 주소로 요청할 수 있습니다.
+이 시스템은 FastAPI를 통해 4개의 주요 API 엔드포인트를 제공합니다. 각 API는 `http://<YOUR_SERVER_IP>:<PORT>` 주소로 요청할 수 있습니다.
 
 ### 1. `/api/chat`
 
@@ -344,4 +344,68 @@ GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
     else:
         print("먼저 /api/generate_form 을 호출하여 'generated_form_content'를 생성해야 합니다.")
 
+    ```
+
+### 4. `/api/custom`
+
+`custom.py`에 구현된 날씨 기반 안전 분석 기능을 활용하여 행사 정보와 실시간 날씨 데이터를 종합한 맞춤형 안전 안내문을 생성합니다. 이 API는 Google Geocoding API와 Open-Meteo 날씨 API를 자동으로 호출하여 행사 장소의 24시간 날씨 예보를 분석하고, 이를 기반으로 날씨 관련 위험 요소를 예측합니다.
+
+-   **Python 코드 예제**:
+    ```python
+    import requests
+
+    custom_url = "http://127.0.0.1:8000/api/custom"  # 실제 서버 주소로 변경 필요
+    custom_payload = {
+        "place_name": "2025 한강 여름 뮤직 페스티벌",
+        "type": "대규모 야외 공연",
+        "location": "서울, 여의도 한강공원",
+        "period": "2025년 8월 8일 ~ 2025년 8월 10일",
+        "description": "뜨거운 여름밤을 식혀줄 대한민국 최고의 뮤직 페스티벌! 다양한 장르의 아티스트들과 함께하는 3일간의 축제. 푸드트럭 존과 체험 이벤트도 준비되어 있습니다.",
+        "category": "음악/페스티벌",
+        "related_documents": "전체 타임테이블, 행사장 안내도, 셔틀버스 운행 정보",
+        "emergency_contact_name": "종합상황실 안전관리팀",
+        "emergency_contact_phone": "02-123-4567",
+        "expected_attendees": "50000"
+    }
+
+    try:
+        response = requests.post(custom_url, json=custom_payload)
+        response.raise_for_status()
+        custom_result = response.json()
+
+        print("--- 날씨 기반 맞춤형 안전 안내문 ---")
+        print(custom_result.get('generation'))
+        
+        # Grounding 검증 결과도 확인 가능
+        if 'hallu_check' in custom_result:
+            print("\n--- Grounding 검증 결과 ---")
+            print(f"신뢰도: {custom_result['hallu_check'].get('answer_with_citations', 'N/A')}")
+
+    except requests.exceptions.RequestException as e:
+        print(f"API 요청 실패: {e}")
+    ```
+
+-   **주요 특징**:
+    - **실시간 날씨 분석**: 행사 장소의 24시간 날씨 예보를 자동으로 수집하고 분석
+    - **다중 벡터 스토어 검색**: 안전 문서, 날씨 관련 사고 사례, 행사 관련 사고 사례를 각각 별도 검색
+    - **Vertex AI Grounding**: 생성된 안내문의 신뢰도를 자동으로 검증
+    - **맞춤형 위험 요소 예측**: 행사 특성과 현재 날씨를 종합하여 구체적인 위험 요소 분석
+
+-   **필수 환경 변수**:
+    ```env
+    GEOCODING_API="YOUR_GOOGLE_GEOCODING_API_KEY"
+    ```
+
+-   **응답 형식**:
+    ```json
+    {
+        "generation": "생성된 날씨 기반 맞춤형 안전 안내문",
+        "hallu_check": {
+            "answer_with_citations": "Grounding 검증이 완료된 안내문 (인용 포함)"
+        },
+        "weather_summary": "분석된 날씨 요약 정보",
+        "festival_query_list": ["생성된 행사 관련 검색어 목록"],
+        "weather_query_list": ["생성된 날씨 관련 검색어 목록"],
+        "safety_query_list": ["생성된 안전 관련 검색어 목록"]
+    }
     ```
