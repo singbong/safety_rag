@@ -4,6 +4,7 @@
 
 
 **※ [RAG] 구축에 필요한 데이터는 https://huggingface.co/datasets/bong9513/safety_rag_data 에서 다운로드 받을 수 있습니다.**
+
 **※ 이 프로젝트는 https://github.com/sumkyun/safety-navigator 와 연결되어 있습니다.**
 
 ## 주요 기능
